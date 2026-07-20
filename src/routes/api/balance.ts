@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { getLovableKey, getOpenRouterKey, getReplicateKey } from "@/lib/ai-env";
 
 type Balance = {
   provider: "free" | "lovable" | "openrouter" | "replicate";
@@ -22,38 +23,38 @@ function fetchFree(): Balance {
 }
 
 function fetchLovable(): Balance {
-  const key = process.env.LOVABLE_API_KEY;
+  const key = getLovableKey();
   return key
-    ? { provider: "lovable", ok: true, statusLabel: "backup Lovable AI ativo", keySource: "LOVABLE_API_KEY" }
+    ? { provider: "lovable", ok: true, statusLabel: "backup Lovable AI ativo", keySource: key.name }
     : { provider: "lovable", ok: false, error: "sem LOVABLE_API_KEY" };
 }
 
 async function fetchOpenRouter(): Promise<Balance> {
-  const key = process.env.OPENROUTER_API_KEY;
+  const key = getOpenRouterKey();
   if (!key) return { provider: "openrouter", ok: false, error: "sem OPENROUTER_API_KEY" };
   try {
     const r = await fetch("https://openrouter.ai/api/v1/credits", {
-      headers: { Authorization: `Bearer ${key}` },
+      headers: { Authorization: `Bearer ${key.value}` },
     });
     if (!r.ok) return { provider: "openrouter", ok: false, error: `${r.status} ${await r.text()}` };
     const j: any = await r.json();
     const total = Number(j?.data?.total_credits ?? 0);
     const used = Number(j?.data?.total_usage ?? 0);
-    return { provider: "openrouter", ok: true, balanceUsd: total - used, usageUsd: used, limitUsd: total, keySource: "OPENROUTER_API_KEY" };
+    return { provider: "openrouter", ok: true, balanceUsd: total - used, usageUsd: used, limitUsd: total, keySource: key.name };
   } catch (e: any) {
     return { provider: "openrouter", ok: false, error: e?.message ?? String(e) };
   }
 }
 
 async function fetchReplicate(): Promise<Balance> {
-  const directKey = process.env.REPLICATE_API_KEY ?? process.env.REPLICATE_API_TOKEN;
+  const directKey = getReplicateKey();
   const connectorKey = process.env.LOVABLE_CONNECTOR_REPLICATE_API_KEY;
-  const lovableKey = process.env.LOVABLE_API_KEY;
+  const lovableKey = getLovableKey();
   if (!directKey && (!connectorKey || !lovableKey)) return { provider: "replicate", ok: false, error: "sem REPLICATE_API_KEY" };
   try {
     if (directKey) {
       const r = await fetch("https://api.replicate.com/v1/account", {
-        headers: { Authorization: `Bearer ${directKey}` },
+        headers: { Authorization: `Bearer ${directKey.value}` },
       });
       if (!r.ok) return { provider: "replicate", ok: false, error: `${r.status} ${await r.text()}` };
       const j: any = await r.json();
@@ -61,7 +62,7 @@ async function fetchReplicate(): Promise<Balance> {
       return {
         provider: "replicate",
         ok: true,
-        keySource: "REPLICATE_API_KEY",
+        keySource: directKey.name,
         statusLabel: "conectado",
         raw: { username: j?.username, name: j?.name, type: j?.type },
         error: "saldo não é exposto pela API — veja em replicate.com/account/billing",
@@ -71,7 +72,7 @@ async function fetchReplicate(): Promise<Balance> {
     const r = await fetch("https://connector-gateway.lovable.dev/api/v1/verify_credentials", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${lovableKey}`,
+        Authorization: `Bearer ${lovableKey.value}`,
         "X-Connection-Api-Key": connectorKey!,
       },
     });
@@ -101,7 +102,7 @@ export const Route = createFileRoute("/api/balance")({
           replicate,
           lovable: fetchLovable(),
           order: ["free", "openrouter-free", "openrouter-cheap", "lovable-backup", "replicate-video"],
-        });
+        }, { headers: { "Cache-Control": "no-store" } });
       },
     },
   },

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { getLovableKey, getOpenRouterKey } from "@/lib/ai-env";
 
 type Provider = {
   name: string;
@@ -12,8 +13,8 @@ export const Route = createFileRoute("/api/image")({
     handlers: {
       POST: async ({ request }) => {
         const { prompt } = (await request.json()) as { prompt: string };
-        const lovableKey = process.env.LOVABLE_API_KEY;
-        const orKey = process.env.OPENROUTER_API_KEY;
+        const lovableKey = getLovableKey();
+        const orKey = getOpenRouterKey();
 
         const fullPrompt = `Cinematic dark atmospheric 16:9 image, no text: ${prompt}`;
         const errors: string[] = [];
@@ -26,7 +27,7 @@ export const Route = createFileRoute("/api/image")({
             name: "openrouter",
             url: "https://openrouter.ai/api/v1/chat/completions",
             headers: {
-              Authorization: `Bearer ${orKey}`,
+              Authorization: `Bearer ${orKey.value}`,
               "Content-Type": "application/json",
               "HTTP-Referer": "https://darkcesar.lovable.app",
               "X-Title": "AIDarkCesar",
@@ -41,7 +42,7 @@ export const Route = createFileRoute("/api/image")({
           providers.push({
             name: "lovable",
             url: "https://ai.gateway.lovable.dev/v1/images/generations",
-            headers: { "Lovable-API-Key": lovableKey, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
+            headers: { "Lovable-API-Key": lovableKey.value, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
             models: [
               "openai/gpt-image-1-mini",
               "google/gemini-3.1-flash-image",
@@ -97,7 +98,10 @@ export const Route = createFileRoute("/api/image")({
           }
         }
 
-        return new Response(`Todos os modelos falharam. ${errors.join(" | ")}`, { status: 502 });
+        const detail = providers.length
+          ? errors.join(" | ")
+          : "Configure OPENROUTER_API_KEY no ambiente do deploy para gerar imagens.";
+        return new Response(`Todos os modelos falharam. ${detail}`, { status: 502 });
       },
     },
   },

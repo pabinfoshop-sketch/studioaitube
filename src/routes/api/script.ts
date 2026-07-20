@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
+import { getLovableKey, getOpenRouterKey, missingAiKeysNotice } from "@/lib/ai-env";
 
 const Input = z.object({
   topic: z.string().min(3),
@@ -112,10 +113,10 @@ export const Route = createFileRoute("/api/script")({
         const rawBody = await request.json().catch(() => ({}));
         try {
           const input = Input.parse(rawBody);
-          const key = process.env.LOVABLE_API_KEY;
-          const openRouterKeyEarly = process.env.OPENROUTER_API_KEY;
-          if (!key && !openRouterKeyEarly) {
-            return Response.json(buildOfflineDraft(input.topic, input.sceneCount, "Sem chaves de IA configuradas."));
+          const lovableKey = getLovableKey();
+          const openRouterKeyEarly = getOpenRouterKey();
+          if (!lovableKey && !openRouterKeyEarly) {
+            return Response.json(buildOfflineDraft(input.topic, input.sceneCount, missingAiKeysNotice()));
           }
 
 
@@ -135,7 +136,7 @@ Responda APENAS com JSON válido, sem markdown, no formato:
 {"title":"","hook":"","seoTitle":"","seoDescription":"","tags":[],"thumbnailPrompt":"","thumbnailText":"","scenes":[{"title":"","narration":"","imagePrompt":""}]}`;
 
           const failures: string[] = [];
-          const openRouterKey = process.env.OPENROUTER_API_KEY;
+          const openRouterKey = getOpenRouterKey();
 
           const providers: Array<{ name: string; url: string; headers: Record<string, string>; models: string[] }> = [];
           if (openRouterKey) {
@@ -143,7 +144,7 @@ Responda APENAS com JSON válido, sem markdown, no formato:
               name: "openrouter",
               url: "https://openrouter.ai/api/v1/chat/completions",
               headers: {
-                Authorization: `Bearer ${openRouterKey}`,
+                Authorization: `Bearer ${openRouterKey.value}`,
                 "Content-Type": "application/json",
                 "HTTP-Referer": "https://darkcesar.lovable.app",
                 "X-Title": "AIDarkCesar",
@@ -161,11 +162,11 @@ Responda APENAS com JSON válido, sem markdown, no formato:
               ],
             });
           }
-          if (key) {
+          if (lovableKey) {
             providers.push({
               name: "lovable",
               url: "https://ai.gateway.lovable.dev/v1/chat/completions",
-              headers: { "Lovable-API-Key": key, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
+              headers: { "Lovable-API-Key": lovableKey.value, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
               models: CHAT_MODELS,
             });
           }
