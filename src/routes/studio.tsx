@@ -137,10 +137,11 @@ function BalanceWidget() {
         <span className="sm:hidden text-muted-foreground">OR</span>
         <span className="font-semibold truncate">{or?.ok ? fmt(or.balanceUsd) : "off"}</span>
       </span>
-      <span className="w-px h-3 bg-white/10 shrink-0 hidden sm:block" />
-      <span className="hidden sm:flex items-center gap-1.5 min-w-0">
+      <span className="w-px h-3 bg-white/10 shrink-0" />
+      <span className="flex items-center gap-1.5 min-w-0">
         <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${rp?.ok ? "bg-green-400" : "bg-red-400"} animate-pulse`} />
-        <span className="text-muted-foreground">Replicate</span>
+        <span className="hidden sm:inline text-muted-foreground">Replicate</span>
+        <span className="sm:hidden text-muted-foreground">RP</span>
         <span className="font-semibold truncate">{rp?.ok ? (rp.raw?.username ?? "ok") : "off"}</span>
       </span>
       {loading && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
