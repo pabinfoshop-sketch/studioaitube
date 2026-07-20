@@ -202,8 +202,16 @@ Responda APENAS com JSON válido, sem markdown, no formato:
           );
         } catch (error) {
           console.error("[api/script]", error);
-          return Response.json(buildOfflineDraft("tema dark", 8, "Erro inesperado; rascunho base gerado."));
+          let fallbackTopic = "tema dark";
+          let fallbackCount = 8;
+          try {
+            const body = await request.clone().json();
+            if (body?.topic) fallbackTopic = String(body.topic);
+            if (body?.sceneCount) fallbackCount = Math.min(50, Math.max(1, Number(body.sceneCount) || 8));
+          } catch { /* noop */ }
+          return Response.json(buildOfflineDraft(fallbackTopic, fallbackCount, "Erro inesperado; rascunho base gerado."));
         }
+
       },
     },
   },
