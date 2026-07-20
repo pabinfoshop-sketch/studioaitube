@@ -161,12 +161,14 @@ Responda APENAS com JSON válido, sem markdown, no formato:
               ],
             });
           }
-          providers.push({
-            name: "lovable",
-            url: "https://ai.gateway.lovable.dev/v1/chat/completions",
-            headers: { "Lovable-API-Key": key, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
-            models: CHAT_MODELS,
-          });
+          if (key) {
+            providers.push({
+              name: "lovable",
+              url: "https://ai.gateway.lovable.dev/v1/chat/completions",
+              headers: { "Lovable-API-Key": key, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
+              models: CHAT_MODELS,
+            });
+          }
 
           for (const p of providers) {
             for (const model of p.models) {
