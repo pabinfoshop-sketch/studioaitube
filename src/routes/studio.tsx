@@ -569,19 +569,36 @@ function Studio() {
           />
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm flex items-center gap-1 shrink-0"><Film className="w-4 h-4" />Cenas:</label>
-            <input type="number" min={1} max={50} value={count}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v === "") { setCount(0 as any); return; }
-                const n = parseInt(v, 10);
-                if (!isNaN(n)) setCount(Math.min(50, Math.max(1, n)));
-              }}
-              onBlur={(e) => { const n = parseInt(e.target.value, 10); if (isNaN(n) || n < 3) setCount(8); }}
-              className="w-20 shrink-0 rounded-md bg-black/40 border border-white/10 p-2 text-sm" />
+            <div className="inline-flex items-stretch rounded-md border border-white/10 bg-black/40 overflow-hidden shrink-0">
+              <button
+                type="button"
+                aria-label="Diminuir cenas"
+                onClick={() => setCount(Math.max(1, (Number(count) || 1) - 1))}
+                className="px-3 text-lg leading-none hover:bg-white/10 active:bg-white/20 select-none"
+              >−</button>
+              <input
+                type="number" inputMode="numeric" min={1} max={50} value={count}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "") { setCount(0 as any); return; }
+                  const n = parseInt(v, 10);
+                  if (!isNaN(n)) setCount(Math.min(50, Math.max(1, n)));
+                }}
+                onBlur={(e) => { const n = parseInt(e.target.value, 10); if (isNaN(n) || n < 3) setCount(8); }}
+                className="w-14 text-center bg-transparent border-x border-white/10 p-2 text-sm focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <button
+                type="button"
+                aria-label="Aumentar cenas"
+                onClick={() => setCount(Math.min(50, (Number(count) || 0) + 1))}
+                className="px-3 text-lg leading-none hover:bg-white/10 active:bg-white/20 select-none"
+              >+</button>
+            </div>
             <button disabled={loading} className="w-full sm:w-auto sm:ml-auto rounded-lg btn-blue-gradient px-5 py-2.5 text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2">
               {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Gerando…</> : <><Wand2 className="w-4 h-4" />Gerar roteiro</>}
             </button>
           </div>
+
           <div className="flex items-center gap-3 flex-wrap pt-1">
             <label className="text-sm flex items-center gap-1"><Mic2 className="w-4 h-4" />Voz:</label>
             <select
