@@ -14,14 +14,13 @@ export const Route = createFileRoute("/api/image")({
         const { prompt } = (await request.json()) as { prompt: string };
         const lovableKey = process.env.LOVABLE_API_KEY;
         const orKey = process.env.OPENROUTER_API_KEY;
-        const replicateKey = process.env.REPLICATE_API_KEY ?? process.env.REPLICATE_API_TOKEN;
-        const replicateConnectorKey = process.env.LOVABLE_CONNECTOR_REPLICATE_API_KEY;
 
         const fullPrompt = `Cinematic dark atmospheric 16:9 image, no text: ${prompt}`;
         const errors: string[] = [];
 
-        // 1) Replicate flux-schnell — cheapest (~$0.003/img, ~1s)
-        if (replicateKey || (replicateConnectorKey && lovableKey)) {
+        // Replicate reservado para animações — imagens usam OpenRouter → Lovable
+        if (false) {
+
           try {
             const useGateway = !replicateKey && !!replicateConnectorKey && !!lovableKey;
             const base = useGateway
