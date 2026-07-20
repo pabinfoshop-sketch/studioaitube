@@ -113,8 +113,9 @@ export const Route = createFileRoute("/api/script")({
         try {
           const input = Input.parse(rawBody);
           const key = process.env.LOVABLE_API_KEY;
-          if (!key) {
-            return Response.json(buildOfflineDraft(input.topic, input.sceneCount, "LOVABLE_API_KEY ausente."));
+          const openRouterKeyEarly = process.env.OPENROUTER_API_KEY;
+          if (!key && !openRouterKeyEarly) {
+            return Response.json(buildOfflineDraft(input.topic, input.sceneCount, "Sem chaves de IA configuradas."));
           }
 
 
@@ -160,12 +161,14 @@ Responda APENAS com JSON válido, sem markdown, no formato:
               ],
             });
           }
-          providers.push({
-            name: "lovable",
-            url: "https://ai.gateway.lovable.dev/v1/chat/completions",
-            headers: { "Lovable-API-Key": key, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
-            models: CHAT_MODELS,
-          });
+          if (key) {
+            providers.push({
+              name: "lovable",
+              url: "https://ai.gateway.lovable.dev/v1/chat/completions",
+              headers: { "Lovable-API-Key": key, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
+              models: CHAT_MODELS,
+            });
+          }
 
           for (const p of providers) {
             for (const model of p.models) {
