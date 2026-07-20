@@ -113,8 +113,9 @@ export const Route = createFileRoute("/api/script")({
         try {
           const input = Input.parse(rawBody);
           const key = process.env.LOVABLE_API_KEY;
-          if (!key) {
-            return Response.json(buildOfflineDraft(input.topic, input.sceneCount, "LOVABLE_API_KEY ausente."));
+          const openRouterKeyEarly = process.env.OPENROUTER_API_KEY;
+          if (!key && !openRouterKeyEarly) {
+            return Response.json(buildOfflineDraft(input.topic, input.sceneCount, "Sem chaves de IA configuradas."));
           }
 
 
