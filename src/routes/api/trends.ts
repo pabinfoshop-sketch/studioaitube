@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
+import { getLovableKey, getOpenRouterKey } from "@/lib/ai-env";
 
 const Input = z.object({
   channelUrl: z.string().url().optional(),
@@ -122,15 +123,15 @@ Cada ideia DEVE incluir OBRIGATORIAMENTE todos os campos abaixo (nunca omita "re
 
 Responda APENAS com JSON válido no formato: {"topics":[{"emoji":"","title":"","tag":"","reason":""}]${wantChannel ? ',"brand":{"primaryColor":"","strokeColor":"","moodKeywords":"","fontStyle":""}' : ""}}`;
 
-          const openRouterKey = process.env.OPENROUTER_API_KEY;
-          const lovableKey = process.env.LOVABLE_API_KEY;
+          const openRouterKey = getOpenRouterKey();
+          const lovableKey = getLovableKey();
           const providers: Array<{ name: string; url: string; headers: Record<string, string>; models: string[] }> = [];
           if (openRouterKey) {
             providers.push({
               name: "openrouter",
               url: "https://openrouter.ai/api/v1/chat/completions",
               headers: {
-                Authorization: `Bearer ${openRouterKey}`,
+                Authorization: `Bearer ${openRouterKey.value}`,
                 "Content-Type": "application/json",
                 "HTTP-Referer": "https://darkcesar.lovable.app",
                 "X-Title": "AIDarkCesar",
@@ -147,7 +148,7 @@ Responda APENAS com JSON válido no formato: {"topics":[{"emoji":"","title":"","
             providers.push({
               name: "lovable",
               url: "https://ai.gateway.lovable.dev/v1/chat/completions",
-              headers: { "Lovable-API-Key": lovableKey, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
+              headers: { "Lovable-API-Key": lovableKey.value, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
               models: ["google/gemini-3-flash-preview", "google/gemini-2.5-flash"],
             });
           }

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
+import { getLovableKey, getReplicateKey } from "@/lib/ai-env";
 
 const Input = z.object({
   imageDataUrl: z.string().min(20),
@@ -11,23 +12,23 @@ const REPLICATE_DIRECT = "https://api.replicate.com/v1";
 const REPLICATE_GATEWAY = "https://connector-gateway.lovable.dev/replicate/v1";
 
 function getReplicateRuntime() {
-  const directKey = process.env.REPLICATE_API_KEY ?? process.env.REPLICATE_API_TOKEN;
+  const directKey = getReplicateKey();
   if (directKey) {
     return {
       mode: "direct" as const,
       baseUrl: REPLICATE_DIRECT,
-      headers: { Authorization: `Bearer ${directKey}` } as Record<string, string>,
+      headers: { Authorization: `Bearer ${directKey.value}` } as Record<string, string>,
     };
   }
 
-  const lovableKey = process.env.LOVABLE_API_KEY;
+  const lovableKey = getLovableKey();
   const connectorKey = process.env.LOVABLE_CONNECTOR_REPLICATE_API_KEY;
   if (lovableKey && connectorKey) {
     return {
       mode: "connector" as const,
       baseUrl: REPLICATE_GATEWAY,
       headers: {
-        Authorization: `Bearer ${lovableKey}`,
+        Authorization: `Bearer ${lovableKey.value}`,
         "X-Connection-Api-Key": connectorKey,
       } as Record<string, string>,
     };
