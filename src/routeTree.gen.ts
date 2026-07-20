@@ -9,38 +9,153 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as StudioRouteImport } from './routes/studio'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiTtsRouteImport } from './routes/api/tts'
+import { Route as ApiTrendsRouteImport } from './routes/api/trends'
+import { Route as ApiScriptRouteImport } from './routes/api/script'
+import { Route as ApiPublishRouteImport } from './routes/api/publish'
+import { Route as ApiImageRouteImport } from './routes/api/image'
+import { Route as ApiBalanceRouteImport } from './routes/api/balance'
+import { Route as ApiAnimateRouteImport } from './routes/api/animate'
 
+const StudioRoute = StudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTtsRoute = ApiTtsRouteImport.update({
+  id: '/api/tts',
+  path: '/api/tts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTrendsRoute = ApiTrendsRouteImport.update({
+  id: '/api/trends',
+  path: '/api/trends',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiScriptRoute = ApiScriptRouteImport.update({
+  id: '/api/script',
+  path: '/api/script',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublishRoute = ApiPublishRouteImport.update({
+  id: '/api/publish',
+  path: '/api/publish',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiImageRoute = ApiImageRouteImport.update({
+  id: '/api/image',
+  path: '/api/image',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBalanceRoute = ApiBalanceRouteImport.update({
+  id: '/api/balance',
+  path: '/api/balance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAnimateRoute = ApiAnimateRouteImport.update({
+  id: '/api/animate',
+  path: '/api/animate',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/studio': typeof StudioRoute
+  '/api/animate': typeof ApiAnimateRoute
+  '/api/balance': typeof ApiBalanceRoute
+  '/api/image': typeof ApiImageRoute
+  '/api/publish': typeof ApiPublishRoute
+  '/api/script': typeof ApiScriptRoute
+  '/api/trends': typeof ApiTrendsRoute
+  '/api/tts': typeof ApiTtsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/studio': typeof StudioRoute
+  '/api/animate': typeof ApiAnimateRoute
+  '/api/balance': typeof ApiBalanceRoute
+  '/api/image': typeof ApiImageRoute
+  '/api/publish': typeof ApiPublishRoute
+  '/api/script': typeof ApiScriptRoute
+  '/api/trends': typeof ApiTrendsRoute
+  '/api/tts': typeof ApiTtsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/studio': typeof StudioRoute
+  '/api/animate': typeof ApiAnimateRoute
+  '/api/balance': typeof ApiBalanceRoute
+  '/api/image': typeof ApiImageRoute
+  '/api/publish': typeof ApiPublishRoute
+  '/api/script': typeof ApiScriptRoute
+  '/api/trends': typeof ApiTrendsRoute
+  '/api/tts': typeof ApiTtsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/studio'
+    | '/api/animate'
+    | '/api/balance'
+    | '/api/image'
+    | '/api/publish'
+    | '/api/script'
+    | '/api/trends'
+    | '/api/tts'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/studio'
+    | '/api/animate'
+    | '/api/balance'
+    | '/api/image'
+    | '/api/publish'
+    | '/api/script'
+    | '/api/trends'
+    | '/api/tts'
+  id:
+    | '__root__'
+    | '/'
+    | '/studio'
+    | '/api/animate'
+    | '/api/balance'
+    | '/api/image'
+    | '/api/publish'
+    | '/api/script'
+    | '/api/trends'
+    | '/api/tts'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  StudioRoute: typeof StudioRoute
+  ApiAnimateRoute: typeof ApiAnimateRoute
+  ApiBalanceRoute: typeof ApiBalanceRoute
+  ApiImageRoute: typeof ApiImageRoute
+  ApiPublishRoute: typeof ApiPublishRoute
+  ApiScriptRoute: typeof ApiScriptRoute
+  ApiTrendsRoute: typeof ApiTrendsRoute
+  ApiTtsRoute: typeof ApiTtsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/studio': {
+      id: '/studio'
+      path: '/studio'
+      fullPath: '/studio'
+      preLoaderRoute: typeof StudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,22 +163,69 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/tts': {
+      id: '/api/tts'
+      path: '/api/tts'
+      fullPath: '/api/tts'
+      preLoaderRoute: typeof ApiTtsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/trends': {
+      id: '/api/trends'
+      path: '/api/trends'
+      fullPath: '/api/trends'
+      preLoaderRoute: typeof ApiTrendsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/script': {
+      id: '/api/script'
+      path: '/api/script'
+      fullPath: '/api/script'
+      preLoaderRoute: typeof ApiScriptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/publish': {
+      id: '/api/publish'
+      path: '/api/publish'
+      fullPath: '/api/publish'
+      preLoaderRoute: typeof ApiPublishRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/image': {
+      id: '/api/image'
+      path: '/api/image'
+      fullPath: '/api/image'
+      preLoaderRoute: typeof ApiImageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/balance': {
+      id: '/api/balance'
+      path: '/api/balance'
+      fullPath: '/api/balance'
+      preLoaderRoute: typeof ApiBalanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/animate': {
+      id: '/api/animate'
+      path: '/api/animate'
+      fullPath: '/api/animate'
+      preLoaderRoute: typeof ApiAnimateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  StudioRoute: StudioRoute,
+  ApiAnimateRoute: ApiAnimateRoute,
+  ApiBalanceRoute: ApiBalanceRoute,
+  ApiImageRoute: ApiImageRoute,
+  ApiPublishRoute: ApiPublishRoute,
+  ApiScriptRoute: ApiScriptRoute,
+  ApiTrendsRoute: ApiTrendsRoute,
+  ApiTtsRoute: ApiTtsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
