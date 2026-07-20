@@ -114,11 +114,11 @@ ${modeBlock}
 ${excludeBlock}
 
 Gere ${input.count} ideias de vídeos com ALTO potencial viral AGORA (curiosidade forte, hook imediato).
-Cada ideia deve incluir:
+Cada ideia DEVE incluir OBRIGATORIAMENTE todos os campos abaixo (nunca omita "reason"):
 - emoji (1 char)
 - title (curto, chamativo, PT-BR, sem clickbait óbvio)
 - tag (categoria: Mistério | True Crime | Oculto | Sobrenatural | Conspiração | Terror | Lenda)
-- reason (1 frase explicando por que esse tema funciona)${brandBlock}
+- reason (1 frase curta em PT-BR explicando por que esse tema viraliza AGORA — SEMPRE preencher)${brandBlock}
 
 Responda APENAS com JSON válido no formato: {"topics":[{"emoji":"","title":"","tag":"","reason":""}]${wantChannel ? ',"brand":{"primaryColor":"","strokeColor":"","moodKeywords":"","fontStyle":""}' : ""}}`;
 
