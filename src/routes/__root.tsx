@@ -11,6 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -24,7 +25,7 @@ function NotFoundComponent() {
         <div className="mt-6">
           <Link
             to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center rounded-md btn-blue-gradient px-4 py-2 text-sm"
           >
             Go home
           </Link>
@@ -56,7 +57,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
               router.invalidate();
               reset();
             }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center rounded-md btn-blue-gradient px-4 py-2 text-sm"
           >
             Try again
           </button>
@@ -77,14 +78,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "AIDarkCesar — Gerador de vídeo com IA para vídeos longos" },
+      { name: "description", content: "Transforme ideias, guiões e histórias em vídeos completos com IA, até 10 minutos. Grátis para experimentar." },
+      { name: "author", content: "AIDarkCesar" },
+      { property: "og:title", content: "AIDarkCesar — Gerador de vídeo com IA para vídeos longos" },
+      { property: "og:description", content: "Transforme ideias, guiões e histórias em vídeos completos com IA, até 10 minutos. Grátis para experimentar." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "AIDarkCesar — Gerador de vídeo com IA para vídeos longos" },
+      { name: "twitter:description", content: "Transforme ideias, guiões e histórias em vídeos completos com IA, até 10 minutos. Grátis para experimentar." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/9db977af-f2cf-4ff2-9b2a-e64d06dff797/id-preview-113fe4d4--d45fec27-a9e8-4da3-82e9-d423ba728b88.lovable.app-1784468318661.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/9db977af-f2cf-4ff2-9b2a-e64d06dff797/id-preview-113fe4d4--d45fec27-a9e8-4da3-82e9-d423ba728b88.lovable.app-1784468318661.png" },
     ],
     links: [
       {
@@ -121,6 +126,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      <Toaster />
     </QueryClientProvider>
   );
 }
