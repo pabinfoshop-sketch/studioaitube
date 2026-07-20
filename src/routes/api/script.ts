@@ -3,9 +3,10 @@ import { z } from "zod";
 
 const Input = z.object({
   topic: z.string().min(3),
-  sceneCount: z.number().int().min(3).max(20).default(8),
+  sceneCount: z.number().int().min(1).max(50).default(8),
   language: z.string().default("pt-BR"),
 });
+
 
 const SceneSchema = z.object({
   title: z.string().default("Cena"),
