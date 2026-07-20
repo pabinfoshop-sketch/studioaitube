@@ -6,7 +6,35 @@ const Input = z.object({
   prompt: z.string().default("cinematic subtle motion, camera drift, atmospheric"),
 });
 
-const GW = "https://connector-gateway.lovable.dev/replicate/v1";
+const REPLICATE_MODEL = "wan-video/wan-2.2-i2v-fast";
+const REPLICATE_DIRECT = "https://api.replicate.com/v1";
+const REPLICATE_GATEWAY = "https://connector-gateway.lovable.dev/replicate/v1";
+
+function getReplicateRuntime() {
+  const directKey = process.env.REPLICATE_API_KEY ?? process.env.REPLICATE_API_TOKEN;
+  if (directKey) {
+    return {
+      mode: "direct" as const,
+      baseUrl: REPLICATE_DIRECT,
+      headers: { Authorization: `Bearer ${directKey}` } as Record<string, string>,
+    };
+  }
+
+  const lovableKey = process.env.LOVABLE_API_KEY;
+  const connectorKey = process.env.LOVABLE_CONNECTOR_REPLICATE_API_KEY;
+  if (lovableKey && connectorKey) {
+    return {
+      mode: "connector" as const,
+      baseUrl: REPLICATE_GATEWAY,
+      headers: {
+        Authorization: `Bearer ${lovableKey}`,
+        "X-Connection-Api-Key": connectorKey,
+      } as Record<string, string>,
+    };
+  }
+
+  return null;
+}
 
 function dataUrlToBytes(dataUrl: string): { bytes: Uint8Array; mime: string } {
   const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -24,21 +52,16 @@ export const Route = createFileRoute("/api/animate")({
       POST: async ({ request }) => {
         try {
           const { imageDataUrl, prompt } = Input.parse(await request.json());
-          const lovableKey = process.env.LOVABLE_API_KEY;
-          const repKey = process.env.REPLICATE_API_KEY;
-          if (!lovableKey || !repKey) {
-            return new Response("Conector Replicate não configurado.", { status: 500 });
+          const runtime = getReplicateRuntime();
+          if (!runtime) {
+            return new Response("Replicate não configurado. Configure REPLICATE_API_KEY ou conecte o Replicate.", { status: 500 });
           }
-          const auth = {
-            Authorization: `Bearer ${lovableKey}`,
-            "X-Connection-Api-Key": repKey,
-          } as Record<string, string>;
 
           // 1) upload da imagem
           const { bytes, mime } = dataUrlToBytes(imageDataUrl);
           const form = new FormData();
           form.append("content", new Blob([bytes as BlobPart], { type: mime }), "frame.png");
-          const upRes = await fetch(`${GW}/files`, { method: "POST", headers: auth, body: form });
+          const upRes = await fetch(`${runtime.baseUrl}/files`, { method: "POST", headers: runtime.headers, body: form });
           if (!upRes.ok) {
             return new Response(`Falha upload Replicate: ${upRes.status} ${await upRes.text()}`, { status: 502 });
           }
@@ -47,10 +70,9 @@ export const Route = createFileRoute("/api/animate")({
           if (!imageUrl) return new Response("Upload Replicate sem URL.", { status: 502 });
 
           // 2) cria predição — wan-2.2-i2v-fast (rápido e barato)
-          const model = "wan-video/wan-2.2-i2v-fast";
-          const createRes = await fetch(`${GW}/models/${model}/predictions`, {
+          const createRes = await fetch(`${runtime.baseUrl}/models/${REPLICATE_MODEL}/predictions`, {
             method: "POST",
-            headers: { ...auth, "Content-Type": "application/json" },
+            headers: { ...runtime.headers, "Content-Type": "application/json" },
             body: JSON.stringify({ input: { image: imageUrl, prompt } }),
           });
           if (createRes.status === 402) {
@@ -66,13 +88,13 @@ export const Route = createFileRoute("/api/animate")({
           // 3) poll (até ~4 min)
           for (let i = 0; i < 80; i++) {
             await new Promise((r) => setTimeout(r, i < 5 ? 3000 : 5000));
-            const r = await fetch(`${GW}/predictions/${id}`, { headers: auth });
+            const r = await fetch(`${runtime.baseUrl}/predictions/${id}`, { headers: runtime.headers });
             const j: any = await r.json();
             const st = j?.status;
             if (st === "succeeded") {
               const out = Array.isArray(j.output) ? j.output[0] : j.output;
               if (!out) return new Response("Sem output de vídeo.", { status: 502 });
-              return Response.json({ videoUrl: out, modelUsed: `replicate/${model}` });
+              return Response.json({ videoUrl: out, modelUsed: `replicate/${REPLICATE_MODEL}`, mode: runtime.mode });
             }
             if (st === "failed" || st === "canceled") {
               return new Response(`Predição ${st}: ${j?.error ?? "sem detalhe"}`, { status: 502 });
