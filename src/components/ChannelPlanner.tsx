@@ -13,7 +13,7 @@ type Props = {
 
 const LS_CHANNEL = "aidc.channelUrl";
 const LS_GOAL = "aidc.dailyGoal";
-const LS_TOPICS = "aidc.topics";
+const LS_TOPICS = "aidc.topics.v2";
 const LS_BRAND = "aidc.brand";
 
 const CATEGORIES = ["Mistério", "True Crime", "Oculto", "Sobrenatural", "Conspiração", "Terror", "Lenda"] as const;
