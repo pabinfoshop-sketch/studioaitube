@@ -109,12 +109,14 @@ export const Route = createFileRoute("/api/script")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const rawBody = await request.json().catch(() => ({}));
         try {
-          const input = Input.parse(await request.json());
+          const input = Input.parse(rawBody);
           const key = process.env.LOVABLE_API_KEY;
           if (!key) {
             return Response.json(buildOfflineDraft(input.topic, input.sceneCount, "LOVABLE_API_KEY ausente."));
           }
+
 
           const prompt = `Você é roteirista e especialista em SEO de canais dark do YouTube (mistério, terror, sobrenatural, true crime).
 Crie um roteiro em ${input.language} sobre: "${input.topic}".
