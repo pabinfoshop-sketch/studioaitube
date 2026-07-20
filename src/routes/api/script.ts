@@ -100,9 +100,8 @@ function buildOfflineDraft(topic: string, sceneCount: number, notice?: string) {
 }
 
 const CHAT_MODELS = [
-  "google/gemini-3.5-flash",
+  "google/gemini-3-flash-preview",
   "google/gemini-2.5-flash",
-  "openai/gpt-5.4-mini",
 ];
 
 export const Route = createFileRoute("/api/script")({
@@ -161,7 +160,7 @@ Responda APENAS com JSON válido, sem markdown, no formato:
           providers.push({
             name: "lovable",
             url: "https://ai.gateway.lovable.dev/v1/chat/completions",
-            headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+            headers: { "Lovable-API-Key": key, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
             models: CHAT_MODELS,
           });
 

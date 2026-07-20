@@ -40,7 +40,7 @@ export const Route = createFileRoute("/api/image")({
           providers.push({
             name: "lovable",
             url: "https://ai.gateway.lovable.dev/v1/images/generations",
-            headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+            headers: { "Lovable-API-Key": lovableKey, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
             models: [
               "openai/gpt-image-1-mini",
               "google/gemini-3.1-flash-image",

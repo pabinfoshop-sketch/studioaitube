@@ -147,8 +147,8 @@ Responda APENAS com JSON válido no formato: {"topics":[{"emoji":"","title":"","
             providers.push({
               name: "lovable",
               url: "https://ai.gateway.lovable.dev/v1/chat/completions",
-              headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
-              models: ["google/gemini-3.5-flash", "google/gemini-2.5-flash"],
+              headers: { "Lovable-API-Key": lovableKey, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
+              models: ["google/gemini-3-flash-preview", "google/gemini-2.5-flash"],
             });
           }
 

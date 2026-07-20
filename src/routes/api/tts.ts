@@ -62,7 +62,36 @@ export const Route = createFileRoute("/api/tts")({
         const voiceId = resolveVoiceId(voice);
         const errors: string[] = [];
 
-        // 1) ElevenLabs (se tiver key e quota)
+        // 1) Fallback grátis primeiro: Google Translate TTS (sem chave, ~200 chars por request)
+        try {
+          const chunks = splitForGoogleTts(text, 190);
+          const parts: ArrayBuffer[] = [];
+          for (const chunk of chunks) {
+            const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=pt-BR&client=tw-ob&q=${encodeURIComponent(chunk)}`;
+            const r = await fetch(url, {
+              headers: {
+                "User-Agent": "Mozilla/5.0",
+                Referer: "https://translate.google.com/",
+              },
+            });
+            if (!r.ok) throw new Error(`google-tts ${r.status}`);
+            parts.push(await r.arrayBuffer());
+          }
+          const total = parts.reduce((n, p) => n + p.byteLength, 0);
+          const merged = new Uint8Array(total);
+          let off = 0;
+          for (const p of parts) {
+            merged.set(new Uint8Array(p), off);
+            off += p.byteLength;
+          }
+          return new Response(merged, {
+            headers: { "Content-Type": "audio/mpeg", "X-TTS-Provider": "google-free" },
+          });
+        } catch (e: any) {
+          errors.push(`google-free: ${e?.message ?? String(e)}`);
+        }
+
+        // 2) ElevenLabs (se tiver key e quota)
         if (elevenKey) {
           try {
             const upstream = await fetch(
@@ -90,7 +119,7 @@ export const Route = createFileRoute("/api/tts")({
           }
         }
 
-        // 2) Fallback: Lovable AI Gateway (OpenAI TTS) — usa créditos da Lovable
+        // 3) Fallback: Lovable AI Gateway (OpenAI TTS) — usa créditos da Lovable
         if (lovableKey) {
           const openaiVoice = voice && ["alloy", "echo", "fable", "onyx", "nova", "shimmer"].includes(voice)
             ? voice
@@ -98,7 +127,7 @@ export const Route = createFileRoute("/api/tts")({
           try {
             const upstream = await fetch("https://ai.gateway.lovable.dev/v1/audio/speech", {
               method: "POST",
-              headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+              headers: { "Lovable-API-Key": lovableKey, "X-Lovable-AIG-SDK": "direct-fetch", "Content-Type": "application/json" },
               body: JSON.stringify({
                 model: "openai/gpt-4o-mini-tts",
                 input: text,
@@ -117,35 +146,6 @@ export const Route = createFileRoute("/api/tts")({
           } catch (e: any) {
             errors.push(`lovable: ${e?.message ?? String(e)}`);
           }
-        }
-
-        // 3) Fallback grátis: Google Translate TTS (sem chave, ~200 chars por request)
-        try {
-          const chunks = splitForGoogleTts(text, 190);
-          const parts: ArrayBuffer[] = [];
-          for (const chunk of chunks) {
-            const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=pt-BR&client=tw-ob&q=${encodeURIComponent(chunk)}`;
-            const r = await fetch(url, {
-              headers: {
-                "User-Agent": "Mozilla/5.0",
-                Referer: "https://translate.google.com/",
-              },
-            });
-            if (!r.ok) throw new Error(`google-tts ${r.status}`);
-            parts.push(await r.arrayBuffer());
-          }
-          const total = parts.reduce((n, p) => n + p.byteLength, 0);
-          const merged = new Uint8Array(total);
-          let off = 0;
-          for (const p of parts) {
-            merged.set(new Uint8Array(p), off);
-            off += p.byteLength;
-          }
-          return new Response(merged, {
-            headers: { "Content-Type": "audio/mpeg", "X-TTS-Provider": "google-free" },
-          });
-        } catch (e: any) {
-          errors.push(`google-free: ${e?.message ?? String(e)}`);
         }
 
         return new Response(
