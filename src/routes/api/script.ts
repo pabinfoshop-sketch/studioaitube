@@ -3,9 +3,10 @@ import { z } from "zod";
 
 const Input = z.object({
   topic: z.string().min(3),
-  sceneCount: z.number().int().min(3).max(20).default(8),
+  sceneCount: z.number().int().min(1).max(50).default(8),
   language: z.string().default("pt-BR"),
 });
+
 
 const SceneSchema = z.object({
   title: z.string().default("Cena"),
@@ -108,12 +109,14 @@ export const Route = createFileRoute("/api/script")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const rawBody = await request.json().catch(() => ({}));
         try {
-          const input = Input.parse(await request.json());
+          const input = Input.parse(rawBody);
           const key = process.env.LOVABLE_API_KEY;
           if (!key) {
             return Response.json(buildOfflineDraft(input.topic, input.sceneCount, "LOVABLE_API_KEY ausente."));
           }
+
 
           const prompt = `Você é roteirista e especialista em SEO de canais dark do YouTube (mistério, terror, sobrenatural, true crime).
 Crie um roteiro em ${input.language} sobre: "${input.topic}".
@@ -201,8 +204,13 @@ Responda APENAS com JSON válido, sem markdown, no formato:
           );
         } catch (error) {
           console.error("[api/script]", error);
-          return Response.json(buildOfflineDraft("tema dark", 8, "Erro inesperado; rascunho base gerado."));
+          const fallbackTopic = typeof (rawBody as any)?.topic === "string" ? (rawBody as any).topic : "tema dark";
+          const rawCount = Number((rawBody as any)?.sceneCount);
+          const fallbackCount = Number.isFinite(rawCount) ? Math.min(50, Math.max(1, Math.floor(rawCount))) : 8;
+          return Response.json(buildOfflineDraft(fallbackTopic, fallbackCount, "Erro inesperado; rascunho base gerado."));
         }
+
+
       },
     },
   },
