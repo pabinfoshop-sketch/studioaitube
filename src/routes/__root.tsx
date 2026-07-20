@@ -88,8 +88,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "AIDarkCesar — Gerador de vídeo com IA para vídeos longos" },
       { name: "twitter:description", content: "Transforme ideias, guiões e histórias em vídeos completos com IA, até 10 minutos. Grátis para experimentar." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/9db977af-f2cf-4ff2-9b2a-e64d06dff797/id-preview-113fe4d4--d45fec27-a9e8-4da3-82e9-d423ba728b88.lovable.app-1784468318661.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/9db977af-f2cf-4ff2-9b2a-e64d06dff797/id-preview-113fe4d4--d45fec27-a9e8-4da3-82e9-d423ba728b88.lovable.app-1784468318661.png" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/f3fe5927-2f10-45f9-afa6-b734ebfca829" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/f3fe5927-2f10-45f9-afa6-b734ebfca829" },
     ],
     links: [
       {
