@@ -17,72 +17,8 @@ export const Route = createFileRoute("/api/image")({
 
         const fullPrompt = `Cinematic dark atmospheric 16:9 image, no text: ${prompt}`;
         const errors: string[] = [];
-
         // Replicate reservado para animações — imagens usam OpenRouter → Lovable
-        if (false) {
 
-          try {
-            const useGateway = !replicateKey && !!replicateConnectorKey && !!lovableKey;
-            const base = useGateway
-              ? "https://connector-gateway.lovable.dev/replicate/v1"
-              : "https://api.replicate.com/v1";
-            const headers: Record<string, string> = useGateway
-              ? {
-                  Authorization: `Bearer ${lovableKey}`,
-                  "X-Connection-Api-Key": replicateConnectorKey!,
-                  "Content-Type": "application/json",
-                  Prefer: "wait",
-                }
-              : {
-                  Authorization: `Bearer ${replicateKey}`,
-                  "Content-Type": "application/json",
-                  Prefer: "wait",
-                };
-            const r = await fetch(`${base}/models/black-forest-labs/flux-schnell/predictions`, {
-              method: "POST",
-              headers,
-              body: JSON.stringify({
-                input: {
-                  prompt: fullPrompt,
-                  aspect_ratio: "16:9",
-                  output_format: "png",
-                  num_outputs: 1,
-                  num_inference_steps: 4,
-                },
-              }),
-            });
-            if (r.ok) {
-              const j: any = await r.json();
-              let outUrl: string | undefined = Array.isArray(j.output) ? j.output[0] : j.output;
-              // If not ready, poll briefly
-              if (!outUrl && j.id) {
-                for (let i = 0; i < 20; i++) {
-                  await new Promise((res) => setTimeout(res, 1500));
-                  const pr = await fetch(`${base}/predictions/${j.id}`, { headers });
-                  const pj: any = await pr.json();
-                  if (pj.status === "succeeded") {
-                    outUrl = Array.isArray(pj.output) ? pj.output[0] : pj.output;
-                    break;
-                  }
-                  if (pj.status === "failed" || pj.status === "canceled") break;
-                }
-              }
-              if (outUrl) {
-                const img = await fetch(outUrl);
-                const buf = new Uint8Array(await img.arrayBuffer());
-                let bin = "";
-                for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
-                const b64 = btoa(bin);
-                return Response.json({ b64, mime: "image/png", modelUsed: "replicate/flux-schnell" });
-              }
-              errors.push(`replicate/flux-schnell: sem output`);
-            } else {
-              errors.push(`replicate/flux-schnell: ${r.status} ${(await r.text()).slice(0, 140)}`);
-            }
-          } catch (e: any) {
-            errors.push(`replicate/flux-schnell: ${e?.message ?? String(e)}`);
-          }
-        }
 
         const providers: Provider[] = [];
         if (orKey) {
