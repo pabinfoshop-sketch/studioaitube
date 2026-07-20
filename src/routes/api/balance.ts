@@ -28,26 +28,23 @@ async function fetchOpenRouter(): Promise<Balance> {
 }
 
 async function fetchReplicate(): Promise<Balance> {
-  const lovableKey = process.env.LOVABLE_API_KEY;
-  const connKey = process.env.LOVABLE_CONNECTOR_REPLICATE_API_KEY;
-  if (!lovableKey || !connKey) {
-    return { provider: "replicate", ok: false, error: "conector Replicate não ligado" };
-  }
+  const key =
+    process.env.REPLICATE_API_KEY ??
+    process.env.REPLICATE_API_TOKEN ??
+    process.env.LOVABLE_CONNECTOR_REPLICATE_API_KEY;
+  if (!key) return { provider: "replicate", ok: false, error: "sem REPLICATE_API_KEY" };
   try {
-    const r = await fetch("https://connector-gateway.lovable.dev/replicate/v1/account", {
-      headers: {
-        Authorization: `Bearer ${lovableKey}`,
-        "X-Connection-Api-Key": connKey,
-      },
+    const r = await fetch("https://api.replicate.com/v1/account", {
+      headers: { Authorization: `Bearer ${key}` },
     });
     if (!r.ok) return { provider: "replicate", ok: false, error: `${r.status} ${await r.text()}` };
     const j: any = await r.json();
-    // Replicate's /v1/account doesn't expose balance publicly; return account info.
+    // Replicate não expõe saldo via API pública — retorna dados da conta.
     return {
       provider: "replicate",
       ok: true,
       raw: { username: j?.username, name: j?.name, type: j?.type },
-      error: "Replicate não expõe saldo via API — veja em replicate.com/account/billing",
+      error: "saldo não é exposto pela API — veja em replicate.com/account/billing",
     };
   } catch (e: any) {
     return { provider: "replicate", ok: false, error: e?.message ?? String(e) };
