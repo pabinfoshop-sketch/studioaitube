@@ -72,7 +72,7 @@ async function fetchReplicate(): Promise<Balance> {
     const r = await fetch("https://connector-gateway.lovable.dev/api/v1/verify_credentials", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${lovableKey.value}`,
+        Authorization: `Bearer ${lovableKey!.value}`,
         "X-Connection-Api-Key": connectorKey!,
       },
     });
