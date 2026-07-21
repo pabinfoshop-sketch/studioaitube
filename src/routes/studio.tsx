@@ -298,7 +298,11 @@ function updateAssembleProgress(prev: AssembleProgressState, message: string, ev
     return { ...prev, logs: [...prev.logs, event.message].slice(-20), message };
   }
   if (event.type === "engine") {
-    return { ...prev, message, phase: "Carregando engine", currentIndex: null, scenePct: 0 };
+    return { ...prev, message, phase: "Carregando engine", currentIndex: null, scenePct: 0, downloadItem: "engine", downloadPct: 0 };
+  }
+  if (event.type === "engine-download") {
+    // Show engine download as 0-5% of total progress
+    return { ...prev, message, phase: "Carregando engine", currentIndex: null, scenePct: (event.pct / 100) * 5, downloadItem: `${event.mb}MB`, downloadPct: event.pct };
   }
   if (event.type === "scene-download") {
     return { ...prev, message, phase: "Baixando recursos", currentIndex: event.index, total: event.total, downloadItem: event.item, downloadPct: event.pct, scenePct: 0 };

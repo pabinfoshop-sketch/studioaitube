@@ -28,7 +28,8 @@ export type AssembleEvent =
   | { type: "scene-done"; index: number; total: number }
   | { type: "concat"; total: number }
   | { type: "done" }
-  | { type: "ffmpeg-progress"; progress: number; time: number; index: number };
+  | { type: "ffmpeg-progress"; progress: number; time: number; index: number }
+  | { type: "engine-download"; pct: number; mb: string };
 
 type ProgressHandler = (msg: string, event?: AssembleEvent) => void;
 
@@ -70,26 +71,47 @@ async function safeFetchFile(url: string, onProgress?: ProgressHandler, label?: 
 }
 
 async function fetchAsBlobURL(url: string, mime: string, onProgress?: ProgressHandler, label?: string) {
-  // Direct first (COEP credentialless allows CDN access, and avoids Cloudflare proxy limits for 30MB wasm)
+  // Direct fetch with streaming progress (avoids toBlobURL which gives no progress feedback)
+  // COEP credentialless allows cross-origin CDN fetches
+  try {
+    const res = await fetch(url, { credentials: "omit" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const total = Number(res.headers.get("content-length") ?? 0);
+    if (res.body && total > 0 && onProgress) {
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let loaded = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        loaded += value.byteLength;
+        const pct = Math.round((loaded / total) * 100);
+        const mb = (loaded / 1_048_576).toFixed(1);
+        onProgress(`Baixando ${label ?? "engine"}… ${mb}MB (${pct}%)`, { type: "engine-download", pct, mb });
+      }
+      const buf = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) { buf.set(chunk, offset); offset += chunk.byteLength; }
+      return URL.createObjectURL(new Blob([buf], { type: mime }));
+    }
+    const buf = await res.arrayBuffer();
+    return URL.createObjectURL(new Blob([buf], { type: mime }));
+  } catch (err) {
+    console.warn("[direct fetch failed, trying toBlobURL]", err);
+  }
+  // Fallback: toBlobURL from @ffmpeg/util
   try {
     return await toBlobURL(url, mime);
-  } catch {
-    console.warn("[toBlobURL failed, trying proxy]", label);
+  } catch (err) {
+    console.warn("[toBlobURL failed, trying proxy]", err);
   }
-  // Fallback: proxy
-  try {
-    const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
-    const res = await fetch(proxyUrl);
-    if (!res.ok) throw new Error(`Proxy ${res.status}`);
-    const buf = await res.arrayBuffer();
-    return URL.createObjectURL(new Blob([buf], { type: mime }));
-  } catch {
-    // Last resort: direct fetch
-    const res = await fetch(url, { credentials: "omit", cache: "force-cache" });
-    if (!res.ok) throw new Error(`${label ?? url}: HTTP ${res.status}`);
-    const buf = await res.arrayBuffer();
-    return URL.createObjectURL(new Blob([buf], { type: mime }));
-  }
+  // Last resort: proxy
+  const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+  const res = await fetch(proxyUrl);
+  if (!res.ok) throw new Error(`Proxy ${res.status}`);
+  const buf = await res.arrayBuffer();
+  return URL.createObjectURL(new Blob([buf], { type: mime }));
 }
 
 async function getFFmpeg(
