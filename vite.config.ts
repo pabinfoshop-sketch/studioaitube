@@ -37,5 +37,14 @@ export default defineConfig({
   // Deploy target: Cloudflare Pages
   nitro: {
     preset: "cloudflare-pages",
+    // Headers necessários para ffmpeg.wasm (SharedArrayBuffer)
+    routeRules: {
+      "/**": {
+        headers: {
+          "Cross-Origin-Opener-Policy": "same-origin",
+          "Cross-Origin-Embedder-Policy": "credentialless",
+        },
+      },
+    },
   },
 });
