@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { assembleVideo, type AssembleEvent } from "@/lib/assembleVideo";
 import { clientBalance, clientScript, clientImage, clientTts, clientAnimate, saveKeysToLocalStorage, getCurrentKeys } from "@/lib/ai-client";
@@ -178,15 +179,17 @@ function ApiKeySettingsModal({ onClose }: { onClose: () => void }) {
   const [showRp, setShowRp] = useState(false);
   const [showEl, setShowEl] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   function save() {
     setSaving(true);
     saveKeysToLocalStorage({ openrouter: orKey.trim(), replicate: rpKey.trim(), elevenlabs: elKey.trim() });
     toast.success("API keys salvas com sucesso!");
     setTimeout(() => { setSaving(false); onClose(); }, 500);
   }
-  return (
+  const content = (
     <div className="fixed inset-0 z-[9999] flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 pt-16 sm:pt-20 overflow-y-auto" onClick={onClose}>
-      <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl my-auto relative z-[10000]" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl my-auto relative" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-base font-bold text-white">Configurar API Keys</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-white transition"><X className="w-4 h-4" /></button>
@@ -231,6 +234,7 @@ function ApiKeySettingsModal({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
+  return mounted ? createPortal(content, document.body) : null;
 }
 
 function AgentWorkingPreview({ modelUsed }: { modelUsed?: string }) {
