@@ -39,7 +39,7 @@ export const Route = createFileRoute("/api/proxy")({
 
         try {
           const res = await fetch(target, {
-            signal: AbortSignal.timeout(120_000), // 2 min for large files
+            signal: AbortSignal.timeout(300_000), // 5 min for large files (ffmpeg.wasm ~32MB)
           });
           if (!res.ok) {
             return new Response(`Upstream ${res.status}`, { status: 502 });

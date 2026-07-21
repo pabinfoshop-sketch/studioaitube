@@ -16,6 +16,7 @@ const FFMPEG_SOURCES = [
 ];
 
 let ffmpegInstance: FFmpeg | null = null;
+let currentSceneIndex = 0;
 
 export type AssembleEvent =
   | { type: "message"; message: string }
@@ -27,7 +28,7 @@ export type AssembleEvent =
   | { type: "scene-done"; index: number; total: number }
   | { type: "concat"; total: number }
   | { type: "done" }
-  | { type: "ffmpeg-progress"; time: number; duration: number; index: number };
+  | { type: "ffmpeg-progress"; progress: number; time: number; index: number };
 
 type ProgressHandler = (msg: string, event?: AssembleEvent) => void;
 
@@ -69,12 +70,13 @@ async function safeFetchFile(url: string, onProgress?: ProgressHandler, label?: 
 }
 
 async function fetchAsBlobURL(url: string, mime: string, onProgress?: ProgressHandler, label?: string) {
+  // Under COEP, cross-origin fetches to CDNs often fail.
+  // Route everything through our server-side proxy to guarantee same-origin delivery.
+  const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+
   try {
-    return await toBlobURL(url, mime);
-  } catch {
-    // Fallback: manual fetch → Blob (more reliable em mobile / service workers)
-    const res = await fetch(url, { credentials: "omit", cache: "force-cache" });
-    if (!res.ok) throw new Error(`${label ?? url}: HTTP ${res.status}`);
+    const res = await fetch(proxyUrl);
+    if (!res.ok) throw new Error(`Proxy ${res.status}`);
     const total = Number(res.headers.get("content-length") ?? 0);
     if (res.body && total > 0 && onProgress) {
       const reader = res.body.getReader();
@@ -92,6 +94,10 @@ async function fetchAsBlobURL(url: string, mime: string, onProgress?: ProgressHa
     }
     const buf = await res.arrayBuffer();
     return URL.createObjectURL(new Blob([buf], { type: mime }));
+  } catch (err) {
+    // If proxy fails (e.g. Cloudflare Workers size limit), try direct toBlobURL as last resort
+    console.warn("[proxy failed for ffmpeg load, trying direct toBlobURL]", err);
+    return await toBlobURL(url, mime);
   }
 }
 
@@ -112,14 +118,14 @@ async function getFFmpeg(
   const ffmpeg = new FFmpeg();
   if (onLog) ffmpeg.on("log", ({ message }) => onLog(message));
 
-  // Track ffmpeg progress events
+  // Track ffmpeg progress events — index is set by assembleVideo per scene
   ffmpeg.on("progress", ({ progress, time }) => {
-    // progress is 0-1, time is in microseconds
-    onProgress?.(`Processando… ${Math.round(progress * 100)}%`, {
+    const pct = Math.round(progress * 100);
+    onProgress?.(`Renderizando cena ${currentSceneIndex + 1}… ${pct}%`, {
       type: "ffmpeg-progress",
+      progress,
       time: time / 1_000_000,
-      duration: 0,
-      index: 0,
+      index: currentSceneIndex,
     });
   });
 
@@ -184,6 +190,7 @@ export async function assembleVideo(
   const FPS = 30;
 
   for (let i = 0; i < scenes.length; i++) {
+    currentSceneIndex = i;
     const sceneStart = Date.now();
     emit(onProgress, `Baixando cena ${i + 1}/${scenes.length}…`, { type: "scene-download", index: i, total: scenes.length, item: "áudio", pct: 0 });
 

@@ -36,6 +36,7 @@ type AssembleProgressState = {
   downloadItem: string;
   downloadPct: number;
   scenePct: number;
+  ffmpegPct: number;
 };
 
 type VoiceId = "onyx" | "echo" | "fable" | "alloy" | "nova" | "shimmer";
@@ -306,7 +307,11 @@ function updateAssembleProgress(prev: AssembleProgressState, message: string, ev
     return { ...prev, message, phase: "Preparando cena", currentIndex: event.index, total: event.total, downloadItem: "", downloadPct: 0, scenePct: 10 };
   }
   if (event.type === "scene-render") {
-    return { ...prev, message, phase: "Renderizando cena", currentIndex: event.index, total: event.total, downloadItem: "", downloadPct: 0, scenePct: 30 };
+    return { ...prev, message, phase: "Renderizando cena", currentIndex: event.index, total: event.total, downloadItem: "", downloadPct: 0, scenePct: 30, ffmpegPct: 0 };
+  }
+  if (event.type === "ffmpeg-progress") {
+    const pct = Math.round((event.progress ?? 0) * 100);
+    return { ...prev, message, phase: "Renderizando cena", currentIndex: event.index, total: prev.total, scenePct: 30 + pct * 0.7, ffmpegPct: pct };
   }
   if (event.type === "scene-done") {
     return { ...prev, message, phase: "Cena concluida", currentIndex: event.index, total: event.total, completed: Math.max(prev.completed, event.index + 1), downloadItem: "", downloadPct: 0, scenePct: 100 };
@@ -620,13 +625,24 @@ function AssembleProgress({ state, images }: { state: AssembleProgressState; ima
                 {Array.from({ length: state.total }, (_, i) => {
                   const done = i < state.completed;
                   const active = i === state.currentIndex;
+                  const ffmpegPct = active && isRendering ? (state.ffmpegPct ?? 0) : 0;
                   return (
                     <div
                       key={i}
-                      className={`flex-1 h-2 rounded-full transition-all duration-500 ${
-                        done ? "bg-green-400" : active ? "bg-primary animate-pulse" : "bg-white/10"
+                      className={`flex-1 h-2 rounded-full transition-all duration-500 relative overflow-hidden ${
+                        done ? "bg-green-400" : active ? "bg-white/10" : "bg-white/10"
                       }`}
-                    />
+                    >
+                      {active && isRendering && (
+                        <div
+                          className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary to-accent transition-all duration-200"
+                          style={{ width: `${Math.max(ffmpegPct, 5)}%` }}
+                        />
+                      )}
+                      {active && !isRendering && (
+                        <div className="absolute inset-0 rounded-full bg-primary animate-pulse" />
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -691,14 +707,26 @@ function AssembleProgress({ state, images }: { state: AssembleProgressState; ima
                       <Film className="w-5 h-5 text-muted-foreground/40" />
                     )}
                     {active && isRendering && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/25 to-transparent animate-[shimmer_1.5s_ease-in-out_infinite]" />
+                      <>
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/25 to-transparent animate-[shimmer_1.5s_ease-in-out_infinite]" />
+                        {/* Real-time ffmpeg progress overlay */}
+                        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/60">
+                          <div
+                            className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-200 ease-out"
+                            style={{ width: `${state.ffmpegPct ?? 0}%` }}
+                          />
+                        </div>
+                        <div className="absolute bottom-2 right-1.5 text-[9px] font-bold text-white bg-black/70 rounded px-1.5 py-0.5 backdrop-blur-sm">
+                          {state.ffmpegPct ?? 0}%
+                        </div>
+                      </>
                     )}
                     {done && !active && (
                       <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
                         <Check className="w-5 h-5 text-green-400" />
                       </div>
                     )}
-                    {active && (
+                    {active && !isRendering && (
                       <div className="absolute inset-0 border-2 border-primary/30 animate-pulse rounded-lg" />
                     )}
                   </div>
@@ -947,7 +975,7 @@ function Studio() {
       toast.error("Gere imagem e áudio de todas as cenas primeiro.");
       return;
     }
-    const initialProgress: AssembleProgressState = { message: "Iniciando...", phase: "Preparando", currentIndex: null, total: script.scenes.length, completed: 0, logs: [], startTime: Date.now(), downloadItem: "", downloadPct: 0, scenePct: 0 };
+    const initialProgress: AssembleProgressState = { message: "Iniciando...", phase: "Preparando", currentIndex: null, total: script.scenes.length, completed: 0, logs: [], startTime: Date.now(), downloadItem: "", downloadPct: 0, scenePct: 0, ffmpegPct: 0 };
     setAssembling(true);
     setAssembleMsg("Iniciando…");
     setAssembleProgress(initialProgress);
