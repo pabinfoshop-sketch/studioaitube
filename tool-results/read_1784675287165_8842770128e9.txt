@@ -1,0 +1,1479 @@
+     1→import { createFileRoute, Link } from "@tanstack/react-router";
+     2→import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+     3→import { createPortal } from "react-dom";
+     4→import { toast } from "sonner";
+     5→import { assembleVideo, type AssembleEvent } from "@/lib/assembleVideo";
+     6→import { clientBalance, clientScript, clientImage, clientTts, clientAnimate, saveKeysToLocalStorage, getCurrentKeys } from "@/lib/ai-client";
+     7→import { Sparkles, Wand2, Film, Mic2, Image as ImageIcon, Loader2, TrendingUp, Settings, Eye, EyeOff, Check, X } from "lucide-react";
+     8→import { ChannelPlanner, type HistoryItem } from "@/components/ChannelPlanner";
+     9→
+    10→const LS_HISTORY = "aidc.history";
+    11→
+    12→export const Route = createFileRoute("/studio")({
+    13→  component: Studio,
+    14→  head: () => ({
+    15→    meta: [
+    16→      { title: "AIDarkCesar Studio — Gerar roteiro, narração e cenas" },
+    17→      { name: "description", content: "Gere roteiros dark, narração TTS e imagens cinematográficas por cena para seu canal do YouTube." },
+    18→    ],
+    19→  }),
+    20→});
+    21→
+    22→type Scene = { title: string; narration: string; imagePrompt: string };
+    23→type Script = {
+    24→  title: string; hook: string; scenes: Scene[]; notice?: string; modelUsed?: string;
+    25→  seoTitle?: string; seoDescription?: string; tags?: string[];
+    26→  thumbnailPrompt?: string; thumbnailText?: string;
+    27→};
+    28→type AssembleProgressState = {
+    29→  message: string;
+    30→  phase: string;
+    31→  currentIndex: number | null;
+    32→  total: number;
+    33→  completed: number;
+    34→  logs: string[];
+    35→  startTime: number;
+    36→  downloadItem: string;
+    37→  downloadPct: number;
+    38→  scenePct: number;
+    39→  ffmpegPct: number;
+    40→};
+    41→
+    42→type VoiceId = "onyx" | "echo" | "fable" | "alloy" | "nova" | "shimmer";
+    43→const VOICES: { id: VoiceId; label: string; desc: string; tags: string[] }[] = [
+    44→  { id: "onyx", label: "Onyx — grave e sombrio", desc: "Ideal para terror, mistério, oculto", tags: ["terror", "mistério", "assombr", "sobrenatural", "oculto", "ritual", "amaldiço", "exorcis", "fantasma", "demo", "sombr", "dark"] },
+    45→  { id: "echo", label: "Echo — sério e investigativo", desc: "Ideal para true crime, conspiração", tags: ["crime", "serial", "killer", "assassin", "caso", "polic", "conspir", "desaparec", "investig", "secret"] },
+    46→  { id: "fable", label: "Fable — narrador clássico", desc: "Ideal para lendas, mitologia, história", tags: ["lenda", "mito", "história", "medieval", "antig", "civiliza", "rei", "guerra"] },
+    47→  { id: "alloy", label: "Alloy — neutro e equilibrado", desc: "Uso geral", tags: [] },
+    48→  { id: "nova", label: "Nova — feminina clara", desc: "Documentário leve", tags: [] },
+    49→  { id: "shimmer", label: "Shimmer — feminina suave", desc: "Contos, ASMR", tags: ["asmr", "conto", "sussurr"] },
+    50→];
+    51→
+    52→function suggestVoice(topic: string): VoiceId {
+    53→  const t = topic.toLowerCase();
+    54→  for (const v of VOICES) if (v.tags.some((k) => t.includes(k))) return v.id;
+    55→  return "onyx";
+    56→}
+    57→
+    58→function sceneNarration(scene: Scene, index: number, topic: string) {
+    59→  const clean = scene.narration.trim();
+    60→  if (clean) return clean;
+    61→  return `Na cena ${index + 1}, a história de ${topic || scene.title || "este mistério"} revela uma nova camada sombria. O silêncio do ambiente aumenta a tensão enquanto pequenos detalhes começam a se conectar. Cada pista parece aproximar o público de uma verdade que ninguém queria encontrar.`;
+    62→}
+    63→
+    64→const TRENDING_TOPICS = [
+    65→  { emoji: "👻", title: "A verdadeira história do Hotel Cecil", tag: "Mistério" },
+    66→  { emoji: "🔪", title: "O caso Elisa Lam: o que ninguém contou", tag: "True Crime" },
+    67→  { emoji: "🌑", title: "Rituais esquecidos da Idade Média", tag: "Oculto" },
+    68→  { emoji: "🕯️", title: "Lugares mais assombrados do Brasil", tag: "Sobrenatural" },
+    69→  { emoji: "👁️", title: "Sociedades secretas que mudaram o mundo", tag: "Conspiração" },
+    70→  { emoji: "🩸", title: "Serial killers que nunca foram capturados", tag: "True Crime" },
+    71→  { emoji: "🌌", title: "Desaparecimentos inexplicáveis no Triângulo das Bermudas", tag: "Mistério" },
+    72→  { emoji: "⛪", title: "Exorcismos reais documentados pela Igreja", tag: "Sobrenatural" },
+    73→  { emoji: "🏚️", title: "A cidade fantasma que apareceu do nada", tag: "Mistério" },
+    74→  { emoji: "📼", title: "Fitas VHS amaldiçoadas que causaram mortes", tag: "Terror" },
+    75→];
+    76→
+    77→const AGENT_STEPS = [
+    78→  "Pesquisando o tema…",
+    79→  "Estruturando arco narrativo…",
+    80→  "Escrevendo o gancho de abertura…",
+    81→  "Desenvolvendo as cenas…",
+    82→  "Refinando atmosfera cinematográfica…",
+    83→  "Gerando prompts visuais…",
+    84→  "Finalizando o roteiro…",
+    85→];
+    86→
+    87→function AnimatedBot({ label }: { label?: string }) {
+    88→  return (
+    89→    <div className="relative w-16 h-16">
+    90→      <div className="absolute inset-0 rounded-full bg-primary/30 blur-xl animate-pulse" />
+    91→      <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-2xl animate-[bounce_2s_ease-in-out_infinite]">
+    92→        <div className="relative w-10 h-10 rounded-xl bg-black/70 flex items-center justify-center">
+    93→          <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-1 h-2 bg-primary rounded-full" />
+    94→          <div className="flex gap-1.5">
+    95→            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+    96→            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse [animation-delay:200ms]" />
+    97→          </div>
+    98→          <span className="absolute bottom-1 w-3 h-0.5 bg-primary/70 rounded animate-pulse" />
+    99→        </div>
+   100→      </div>
+   101→      {label && (
+   102→        <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] uppercase tracking-widest text-primary/90">
+   103→          {label}
+   104→        </div>
+   105→      )}
+   106→    </div>
+   107→  );
+   108→}
+   109→
+   110→type BalanceResp = {
+   111→  free?: { ok: boolean; statusLabel?: string; error?: string };
+   112→  lovable?: { ok: boolean; statusLabel?: string; error?: string };
+   113→  openrouter: { ok: boolean; balanceUsd?: number; usageUsd?: number; limitUsd?: number | null; statusLabel?: string; isFreeTier?: boolean; error?: string };
+   114→  replicate: { ok: boolean; raw?: any; statusLabel?: string; error?: string };
+   115→  order?: string[];
+   116→};
+   117→
+   118→function BalanceWidget() {
+   119→  const [data, setData] = useState<BalanceResp | null>(null);
+   120→  const [loading, setLoading] = useState(false);
+   121→  const [showSettings, setShowSettings] = useState(false);
+   122→  async function refresh() {
+   123→    setLoading(true);
+   124→    try { setData(await clientBalance() as any); } catch { /* noop */ }
+   125→    finally { setLoading(false); }
+   126→  }
+   127→  useEffect(() => { refresh(); const id = setInterval(refresh, 30_000); return () => clearInterval(id); }, []);
+   128→  const or = data?.openrouter;
+   129→  const rp = data?.replicate;
+   130→  const free = data?.free;
+   131→  const fmt = (n?: number) => (typeof n === "number" ? `$${n.toFixed(2)}` : null);
+   132→  const orLabel = or?.ok
+   133→    ? (fmt(or.balanceUsd) ?? or.statusLabel ?? (or.usageUsd != null ? `usado $${or.usageUsd.toFixed(2)}` : "ok"))
+   134→    : (or?.error ?? "off");
+   135→  const rpLabel = rp?.ok ? (rp.statusLabel ?? "ok") : (rp?.error ?? "off");
+   136→  return (
+   137→    <>
+   138→      <div className="flex items-center gap-1.5">
+   139→        <button
+   140→          onClick={refresh}
+   141→          title={data
+   142→            ? `TTS: ${free?.ok ? "gratuito" : "off"}\nOpenRouter: ${or?.ok ? (or.statusLabel ?? "ok") : (or?.error ?? "off")}\nReplicate: ${rp?.ok ? (rp.statusLabel ?? "ok") : (rp?.error ?? "off")}\n\nClique para atualizar`
+   143→            : "Carregando..."}
+   144→          className="flex items-center gap-2 sm:gap-3 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-[11px] transition min-w-0 max-w-[calc(100vw-10rem)] overflow-hidden"
+   145→        >
+   146→          <span className="flex items-center gap-1.5 min-w-0">
+   147→            <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${free?.ok !== false ? "bg-green-400" : "bg-red-400"} animate-pulse`} />
+   148→            <span className="text-muted-foreground">TTS</span>
+   149→            <span className="font-semibold text-green-400">grátis</span>
+   150→          </span>
+   151→          <span className="w-px h-3 bg-white/10 shrink-0" />
+   152→          <span className="flex items-center gap-1.5 min-w-0">
+   153→            <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${or?.ok ? "bg-green-400" : "bg-red-400"} animate-pulse`} />
+   154→            <span className="hidden sm:inline text-muted-foreground">OR</span>
+   155→            <span className={`font-semibold truncate ${or?.ok ? "text-green-400" : "text-red-400"}`}>{orLabel}</span>
+   156→          </span>
+   157→          <span className="w-px h-3 bg-white/10 shrink-0" />
+   158→          <span className="flex items-center gap-1.5 min-w-0">
+   159→            <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${rp?.ok ? "bg-green-400" : "bg-red-400"} animate-pulse`} />
+   160→            <span className="hidden sm:inline text-muted-foreground">RP</span>
+   161→            <span className={`font-semibold truncate ${rp?.ok ? "text-green-400" : "text-red-400"}`}>{rpLabel}</span>
+   162→          </span>
+   163→          {loading && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+   164→        </button>
+   165→        <button
+   166→          onClick={() => setShowSettings(true)}
+   167→          className="rounded-full border border-white/10 bg-white/5 hover:bg-white/10 p-1.5 transition"
+   168→          title="Configurar API Keys"
+   169→        >
+   170→          <Settings className="w-3.5 h-3.5 text-muted-foreground" />
+   171→        </button>
+   172→      </div>
+   173→      {showSettings && <ApiKeySettingsModal onClose={() => { setShowSettings(false); refresh(); }} />}
+   174→    </>
+   175→  );
+   176→}
+   177→
+   178→function ApiKeySettingsModal({ onClose }: { onClose: () => void }) {
+   179→  const current = getCurrentKeys();
+   180→  const [orKey, setOrKey] = useState(current.openrouter);
+   181→  const [rpKey, setRpKey] = useState(current.replicate);
+   182→  const [elKey, setElKey] = useState(current.elevenlabs);
+   183→  const [showOr, setShowOr] = useState(false);
+   184→  const [showRp, setShowRp] = useState(false);
+   185→  const [showEl, setShowEl] = useState(false);
+   186→  const [saving, setSaving] = useState(false);
+   187→  const [mounted, setMounted] = useState(false);
+   188→  useEffect(() => { setMounted(true); }, []);
+   189→  function save() {
+   190→    setSaving(true);
+   191→    saveKeysToLocalStorage({ openrouter: orKey.trim(), replicate: rpKey.trim(), elevenlabs: elKey.trim() });
+   192→    toast.success("API keys salvas com sucesso!");
+   193→    setTimeout(() => { setSaving(false); onClose(); }, 500);
+   194→  }
+   195→  const content = (
+   196→    <div className="fixed inset-0 z-[9999] flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 pt-16 sm:pt-20 overflow-y-auto" onClick={onClose}>
+   197→      <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl my-auto relative" onClick={(e) => e.stopPropagation()}>
+   198→        <div className="flex items-center justify-between mb-5">
+   199→          <h3 className="text-base font-bold text-white">Configurar API Keys</h3>
+   200→          <button onClick={onClose} className="text-muted-foreground hover:text-white transition"><X className="w-4 h-4" /></button>
+   201→        </div>
+   202→        <p className="text-xs text-muted-foreground mb-4">As keys ficam salvas no seu navegador (localStorage). Se as env vars ja estiverem configuradas no servidor, elas tem prioridade.</p>
+   203→        <div className="space-y-3">
+   204→          <div>
+   205→            <label className="text-[11px] text-muted-foreground mb-1 block">OPENROUTER_API_KEY</label>
+   206→            <div className="flex gap-1.5">
+   207→              <div className="relative flex-1">
+   208→                <input type={showOr ? "text" : "password"} value={orKey} onChange={(e) => setOrKey(e.target.value)} placeholder="sk-or-v1-..." className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-primary/50" />
+   209→                <button onClick={() => setShowOr(!showOr)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white">{showOr ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}</button>
+   210→              </div>
+   211→              {orKey && <span className="flex items-center text-[10px] text-green-400 whitespace-nowrap"><Check className="w-3 h-3" /></span>}
+   212→            </div>
+   213→          </div>
+   214→          <div>
+   215→            <label className="text-[11px] text-muted-foreground mb-1 block">REPLICATE_API_KEY</label>
+   216→            <div className="flex gap-1.5">
+   217→              <div className="relative flex-1">
+   218→                <input type={showRp ? "text" : "password"} value={rpKey} onChange={(e) => setRpKey(e.target.value)} placeholder="r8_..." className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-primary/50" />
+   219→                <button onClick={() => setShowRp(!showRp)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white">{showRp ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}</button>
+   220→              </div>
+   221→              {rpKey && <span className="flex items-center text-[10px] text-green-400 whitespace-nowrap"><Check className="w-3 h-3" /></span>}
+   222→            </div>
+   223→          </div>
+   224→          <div>
+   225→            <label className="text-[11px] text-muted-foreground mb-1 block">ELEVENLABS_API_KEY <span className="text-zinc-600">(opcional)</span></label>
+   226→            <div className="flex gap-1.5">
+   227→              <div className="relative flex-1">
+   228→                <input type={showEl ? "text" : "password"} value={elKey} onChange={(e) => setElKey(e.target.value)} placeholder="xi-..." className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-primary/50" />
+   229→                <button onClick={() => setShowEl(!showEl)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white">{showEl ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}</button>
+   230→              </div>
+   231→              {elKey && <span className="flex items-center text-[10px] text-green-400 whitespace-nowrap"><Check className="w-3 h-3" /></span>}
+   232→            </div>
+   233→          </div>
+   234→        </div>
+   235→        <div className="flex gap-2 mt-5">
+   236→          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-white/10 text-xs text-muted-foreground hover:bg-white/5 transition">Cancelar</button>
+   237→          <button onClick={save} disabled={saving} className="flex-1 py-2 rounded-lg bg-primary text-xs font-semibold text-white hover:bg-primary/90 transition disabled:opacity-50">{saving ? "Salvando..." : "Salvar Keys"}</button>
+   238→        </div>
+   239→      </div>
+   240→    </div>
+   241→  );
+   242→  return mounted ? createPortal(content, document.body) : null;
+   243→}
+   244→
+   245→function AgentWorkingPreview({ modelUsed }: { modelUsed?: string }) {
+   246→  const [step, setStep] = useState(0);
+   247→  useEffect(() => {
+   248→    const id = setInterval(() => setStep((s) => (s + 1) % AGENT_STEPS.length), 1600);
+   249→    return () => clearInterval(id);
+   250→  }, []);
+   251→  return (
+   252→    <div className="rounded-xl border border-white/10 bg-gradient-to-br from-primary/10 via-white/5 to-accent/10 p-6 space-y-4 relative overflow-hidden">
+   253→      <div className="absolute inset-0 opacity-20 pointer-events-none">
+   254→        <div className="absolute -top-16 -left-16 w-64 h-64 rounded-full bg-primary blur-3xl animate-pulse" />
+   255→        <div className="absolute -bottom-16 -right-16 w-64 h-64 rounded-full bg-accent blur-3xl animate-pulse" />
+   256→      </div>
+   257→      <div className="relative flex items-center gap-4">
+   258→        <AnimatedBot />
+   259→        <div className="min-w-0 flex-1">
+   260→          <div className="font-semibold text-sm">Agente AIDarkCesar</div>
+   261→          <div className="text-xs text-muted-foreground">trabalhando no seu roteiro</div>
+   262→          <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+   263→            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+   264→            IA: {modelUsed ?? "selecionando modelo mais barato…"}
+   265→          </div>
+   266→        </div>
+   267→      </div>
+   268→      <div className="relative space-y-2">
+   269→        {AGENT_STEPS.map((s, i) => (
+   270→          <div
+   271→            key={s}
+   272→            className={`flex items-center gap-2 text-sm transition-all ${
+   273→              i < step ? "text-muted-foreground line-through opacity-60" :
+   274→              i === step ? "text-foreground" : "text-muted-foreground/50"
+   275→            }`}
+   276→          >
+   277→            {i < step ? (
+   278→              <span className="w-4 h-4 rounded-full bg-green-500/20 text-green-400 text-[10px] flex items-center justify-center">✓</span>
+   279→            ) : i === step ? (
+   280→              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+   281→            ) : (
+   282→              <span className="w-4 h-4 rounded-full border border-white/20" />
+   283→            )}
+   284→            {s}
+   285→          </div>
+   286→        ))}
+   287→      </div>
+   288→      <div className="relative w-full h-1 bg-white/10 rounded-full overflow-hidden">
+   289→        <div className="h-full bg-gradient-to-r from-primary to-accent animate-pulse" style={{ width: "60%" }} />
+   290→      </div>
+   291→    </div>
+   292→  );
+   293→}
+   294→
+   295→function updateAssembleProgress(prev: AssembleProgressState, message: string, event?: AssembleEvent): AssembleProgressState {
+   296→  if (!event) return { ...prev, message };
+   297→  if (event.type === "log") {
+   298→    return { ...prev, logs: [...prev.logs, event.message].slice(-20), message };
+   299→  }
+   300→  if (event.type === "engine") {
+   301→    return { ...prev, message, phase: "Carregando engine", currentIndex: null, scenePct: 0, downloadItem: "engine", downloadPct: 0 };
+   302→  }
+   303→  if (event.type === "engine-download") {
+   304→    // Show engine download as 0-5% of total progress
+   305→    return { ...prev, message, phase: "Carregando engine", currentIndex: null, scenePct: (event.pct / 100) * 5, downloadItem: `${event.mb}MB`, downloadPct: event.pct };
+   306→  }
+   307→  if (event.type === "scene-download") {
+   308→    return { ...prev, message, phase: "Baixando recursos", currentIndex: event.index, total: event.total, downloadItem: event.item, downloadPct: event.pct, scenePct: 0 };
+   309→  }
+   310→  if (event.type === "scene-start") {
+   311→    return { ...prev, message, phase: "Preparando cena", currentIndex: event.index, total: event.total, downloadItem: "", downloadPct: 0, scenePct: 10 };
+   312→  }
+   313→  if (event.type === "scene-render") {
+   314→    return { ...prev, message, phase: "Renderizando cena", currentIndex: event.index, total: event.total, downloadItem: "", downloadPct: 0, scenePct: 30, ffmpegPct: 0 };
+   315→  }
+   316→  if (event.type === "ffmpeg-progress") {
+   317→    const pct = Math.round((event.progress ?? 0) * 100);
+   318→    return { ...prev, message, phase: "Renderizando cena", currentIndex: event.index, total: prev.total, scenePct: 30 + pct * 0.7, ffmpegPct: pct };
+   319→  }
+   320→  if (event.type === "scene-done") {
+   321→    return { ...prev, message, phase: "Cena concluida", currentIndex: event.index, total: event.total, completed: Math.max(prev.completed, event.index + 1), downloadItem: "", downloadPct: 0, scenePct: 100 };
+   322→  }
+   323→  if (event.type === "concat") {
+   324→    return { ...prev, message, phase: "Unindo cenas", currentIndex: null, total: event.total, completed: event.total, scenePct: 0 };
+   325→  }
+   326→  if (event.type === "done") {
+   327→    return { ...prev, message, phase: "Video pronto", currentIndex: null, completed: prev.total, scenePct: 100 };
+   328→  }
+   329→  return { ...prev, message };
+   330→}
+   331→
+   332→/* --- Ken Burns Canvas Preview --- */
+   333→function KenBurnsCanvas({ imageUrl, styleIndex, playing }: { imageUrl: string; styleIndex: number; playing: boolean }) {
+   334→  const canvasRef = useRef<HTMLCanvasElement>(null);
+   335→  const imgRef = useRef<HTMLImageElement | null>(null);
+   336→  const animRef = useRef<number>(0);
+   337→  const startRef = useRef(0);
+   338→
+   339→  useEffect(() => {
+   340→    const img = new Image();
+   341→    img.crossOrigin = "anonymous";
+   342→    img.src = imageUrl;
+   343→    img.onload = () => { imgRef.current = img; };
+   344→    imgRef.current = null;
+   345→  }, [imageUrl]);
+   346→
+   347→  useEffect(() => {
+   348→    const canvas = canvasRef.current;
+   349→    if (!canvas) return;
+   350→    const ctx = canvas.getContext("2d")!;
+   351→    const W = canvas.width;
+   352→    const H = canvas.height;
+   353→    const DURATION = 6000;
+   354→
+   355→    function draw(ts: number) {
+   356→      if (!startRef.current) startRef.current = ts;
+   357→      const elapsed = ts - startRef.current;
+   358→      const t = Math.min(elapsed / DURATION, 1);
+   359→      const img = imgRef.current;
+   360→
+   361→      ctx.fillStyle = "#000";
+   362→      ctx.fillRect(0, 0, W, H);
+   363→
+   364→      if (img) {
+   365→        const zoom = 1.0 + t * 0.3;
+   366→        const iw = W * zoom;
+   367→        const ih = H * zoom;
+   368→        let ox: number, oy: number;
+   369→        switch (styleIndex % 5) {
+   370→          case 0: ox = (W - iw) / 2; oy = (H - ih) / 2; break;
+   371→          case 1: ox = (W - iw) / 2; oy = (H - ih) / 2; break;
+   372→          case 2: ox = -(iw - W) * t; oy = (H - ih) / 2; break;
+   373→          case 3: ox = -(iw - W) * (1 - t); oy = (H - ih) / 2; break;
+   374→          default: ox = (W - iw) / 2; oy = -(ih - H) * t; break;
+   375→        }
+   376→        ctx.drawImage(img, ox, oy, iw, ih);
+   377→        // vignette
+   378→        const grad = ctx.createRadialGradient(W / 2, H / 2, W * 0.25, W / 2, H / 2, W * 0.7);
+   379→        grad.addColorStop(0, "rgba(0,0,0,0)");
+   380→        grad.addColorStop(1, "rgba(0,0,0,0.6)");
+   381→        ctx.fillStyle = grad;
+   382→        ctx.fillRect(0, 0, W, H);
+   383→      }
+   384→
+   385→      // cinematic bars
+   386→      ctx.fillStyle = "rgba(0,0,0,0.5)";
+   387→      ctx.fillRect(0, 0, W, H * 0.07);
+   388→      ctx.fillRect(0, H * 0.93, W, H * 0.07);
+   389→
+   390→      // scanline
+   391→      const scanY = (elapsed * 0.05) % H;
+   392→      ctx.fillStyle = "rgba(139,92,246,0.08)";
+   393→      ctx.fillRect(0, scanY, W, 2);
+   394→
+   395→      if (playing && t < 1) {
+   396→        animRef.current = requestAnimationFrame(draw);
+   397→      } else if (playing && t >= 1) {
+   398→        startRef.current = 0;
+   399→        animRef.current = requestAnimationFrame(draw);
+   400→      }
+   401→    }
+   402→
+   403→    if (playing) {
+   404→      startRef.current = 0;
+   405→      animRef.current = requestAnimationFrame(draw);
+   406→    }
+   407→    return () => cancelAnimationFrame(animRef.current);
+   408→  }, [playing, styleIndex, imageUrl]);
+   409→
+   410→  return (
+   411→    <canvas
+   412→      ref={canvasRef}
+   413→      width={640}
+   414→      height={360}
+   415→      className="w-full h-full object-cover rounded-xl"
+   416→    />
+   417→  );
+   418→}
+   419→
+   420→/* --- Audio Waveform Visualizer --- */
+   421→function AudioWaveform({ playing, color = "#a78bfa" }: { playing: boolean; color?: string }) {
+   422→  const canvasRef = useRef<HTMLCanvasElement>(null);
+   423→  const animRef = useRef<number>(0);
+   424→
+   425→  useEffect(() => {
+   426→    const canvas = canvasRef.current;
+   427→    if (!canvas) return;
+   428→    const ctx = canvas.getContext("2d")!;
+   429→    const W = canvas.width;
+   430→    const H = canvas.height;
+   431→    const BARS = 48;
+   432→    const barW = W / BARS;
+   433→    let phase = 0;
+   434→
+   435→    function draw() {
+   436→      ctx.clearRect(0, 0, W, H);
+   437→      phase += 0.04;
+   438→
+   439→      for (let i = 0; i < BARS; i++) {
+   440→        const x = i * barW;
+   441→        let h: number;
+   442→        if (playing) {
+   443→          const wave = Math.sin(phase + i * 0.3) * 0.4 + Math.sin(phase * 1.5 + i * 0.15) * 0.3 + Math.cos(phase * 0.7 + i * 0.5) * 0.3;
+   444→          h = Math.abs(wave) * H * 0.85 + H * 0.08;
+   445→        } else {
+   446→          h = H * 0.1;
+   447→        }
+   448→        const grad = ctx.createLinearGradient(x, H - h, x, H);
+   449→        grad.addColorStop(0, color);
+   450→        grad.addColorStop(1, color + "33");
+   451→        ctx.fillStyle = grad;
+   452→        ctx.fillRect(x + 1, H - h, barW - 2, h);
+   453→      }
+   454→      animRef.current = requestAnimationFrame(draw);
+   455→    }
+   456→    animRef.current = requestAnimationFrame(draw);
+   457→    return () => cancelAnimationFrame(animRef.current);
+   458→  }, [playing, color]);
+   459→
+   460→  return (
+   461→    <canvas ref={canvasRef} width={384} height={48} className="w-full h-12 rounded-lg" />
+   462→  );
+   463→}
+   464→
+   465→/* --- Floating Particles --- */
+   466→function Particles({ count = 20 }: { count?: number }) {
+   467→  const canvasRef = useRef<HTMLCanvasElement>(null);
+   468→  const animRef = useRef<number>(0);
+   469→  const particlesRef = useRef<{ x: number; y: number; vx: number; vy: number; r: number; a: number }[]>([]);
+   470→
+   471→  useEffect(() => {
+   472→    const canvas = canvasRef.current;
+   473→    if (!canvas) return;
+   474→    const ctx = canvas.getContext("2d")!;
+   475→    const W = canvas.width;
+   476→    const H = canvas.height;
+   477→    particlesRef.current = Array.from({ length: count }, () => ({
+   478→      x: Math.random() * W, y: Math.random() * H,
+   479→      vx: (Math.random() - 0.5) * 0.5, vy: -Math.random() * 0.8 - 0.2,
+   480→      r: Math.random() * 2 + 0.5, a: Math.random() * 0.5 + 0.2,
+   481→    }));
+   482→
+   483→    function draw() {
+   484→      ctx.clearRect(0, 0, W, H);
+   485→      for (const p of particlesRef.current) {
+   486→        p.x += p.vx; p.y += p.vy;
+   487→        if (p.y < -5) { p.y = H + 5; p.x = Math.random() * W; }
+   488→        if (p.x < -5) p.x = W + 5;
+   489→        if (p.x > W + 5) p.x = -5;
+   490→        ctx.beginPath();
+   491→        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+   492→        ctx.fillStyle = `rgba(167,139,250,${p.a})`;
+   493→        ctx.fill();
+   494→      }
+   495→      animRef.current = requestAnimationFrame(draw);
+   496→    }
+   497→    animRef.current = requestAnimationFrame(draw);
+   498→    return () => cancelAnimationFrame(animRef.current);
+   499→  }, [count]);
+   500→
+   501→  return <canvas ref={canvasRef} width={200} height={200} className="absolute inset-0 w-full h-full pointer-events-none" />;
+   502→}
+   503→
+   504→/* --- Main AssembleProgress with real-time animation --- */
+   505→function AssembleProgress({ state, images }: { state: AssembleProgressState; images: Record<number, { url: string; final: boolean }> }) {
+   506→  const [elapsed, setElapsed] = useState(0);
+   507→  const [smoothPct, setSmoothPct] = useState(0);
+   508→
+   509→  useEffect(() => {
+   510→    const start = state.startTime || Date.now();
+   511→    const id = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 200);
+   512→    return () => clearInterval(id);
+   513→  }, [state.startTime]);
+   514→
+   515→  // Smooth progress animation
+   516→  useEffect(() => {
+   517→    const raw = state.total > 0
+   518→      ? Math.min(99, Math.round(((state.completed + (state.scenePct ?? 0) / 100) / state.total) * 100))
+   519→      : 5;
+   520→    const id = setInterval(() => {
+   521→      setSmoothPct(prev => {
+   522→        const diff = raw - prev;
+   523→        if (Math.abs(diff) < 0.5) return raw;
+   524→        return prev + diff * 0.08;
+   525→      });
+   526→    }, 30);
+   527→    return () => clearInterval(id);
+   528→  }, [state.completed, state.scenePct, state.total]);
+   529→
+   530→  const progress = Math.round(smoothPct);
+   531→  const currentImage = state.currentIndex == null ? null : images[state.currentIndex]?.url;
+   532→  const activeIndex = state.currentIndex ?? (state.completed > 0 ? state.completed - 1 : 0);
+   533→  const etaSec = state.completed > 0 && state.total > state.completed
+   534→    ? Math.round((elapsed / state.completed) * (state.total - state.completed))
+   535→    : 0;
+   536→  const fmtTime = (s: number) => s >= 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : s >= 60 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${s}s`;
+   537→
+   538→  const isRendering = state.phase === "Renderizando cena";
+   539→  const isEngine = state.phase === "Carregando engine";
+   540→  const isDone = state.phase === "Video pronto";
+   541→
+   542→  return (
+   543→    <div className="mt-5 rounded-2xl border border-primary/30 bg-black/80 backdrop-blur-xl overflow-hidden relative">
+   544→      {/* Particle layer */}
+   545→      <Particles count={25} />
+   546→
+   547→      {/* Animated background glow */}
+   548→      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+   549→        <div className="absolute -top-32 -right-16 w-96 h-96 rounded-full bg-primary/15 blur-[120px] animate-pulse" />
+   550→        <div className="absolute -bottom-32 -left-16 w-96 h-96 rounded-full bg-accent/15 blur-[120px] animate-pulse [animation-delay:1.5s]" />
+   551→        <div className="absolute left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent animate-[scan_3s_ease-in-out_infinite]" />
+   552→      </div>
+   553→
+   554→      <div className="relative p-5 sm:p-6 space-y-5">
+   555→        {/* Hero: Ken Burns preview + info */}
+   556→        <div className="grid md:grid-cols-[1fr_280px] gap-5">
+   557→          {/* Ken Burns Canvas */}
+   558→          <div className="relative aspect-video rounded-xl overflow-hidden border border-white/10 bg-black shadow-2xl shadow-primary/10">
+   559→            {currentImage ? (
+   560→              <KenBurnsCanvas imageUrl={currentImage} styleIndex={state.currentIndex ?? 0} playing={isRendering} />
+   561→            ) : isEngine ? (
+   562→              <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+   563→                <div className="relative">
+   564→                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center animate-spin [animation-duration:3s]">
+   565→                    <Film className="w-8 h-8 text-black" />
+   566→                  </div>
+   567→                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary to-accent blur-xl opacity-40 animate-pulse" />
+   568→                </div>
+   569→                <div className="text-center">
+   570→                  <div className="text-sm font-medium text-primary">Carregando Engine de Video</div>
+   571→                  <div className="text-xs text-muted-foreground mt-1">Canvas nativo do navegador</div>
+   572→                </div>
+   573→              </div>
+   574→            ) : isDone ? (
+   575→              <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+   576→                <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center animate-[bounce_1s_ease-in-out_infinite]">
+   577→                  <Check className="w-10 h-10 text-green-400" />
+   578→                </div>
+   579→                <div className="text-lg font-bold text-green-400">Video Pronto!</div>
+   580→              </div>
+   581→            ) : (
+   582→              <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+   583→                <Loader2 className="w-10 h-10 text-primary animate-spin" />
+   584→                <div className="text-sm text-muted-foreground">Preparando...</div>
+   585→              </div>
+   586→            )}
+   587→            {/* Overlay: scene counter badge */}
+   588→            {state.currentIndex != null && (
+   589→              <div className="absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-black/70 backdrop-blur-sm border border-primary/30 px-3 py-1 text-xs font-medium">
+   590→                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+   591→                <span className="text-primary">Cena {activeIndex + 1}/{state.total}</span>
+   592→              </div>
+   593→            )}
+   594→            {/* Overlay: phase badge */}
+   595→            <div className="absolute top-3 left-3 rounded-full bg-black/70 backdrop-blur-sm border border-white/10 px-3 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+   596→              {state.phase}
+   597→            </div>
+   598→          </div>
+   599→
+   600→          {/* Info panel */}
+   601→          <div className="space-y-4">
+   602→            {/* Percentage */}
+   603→            <div className="text-center">
+   604→              <div className="text-5xl font-black bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent leading-none">
+   605→                {progress}%
+   606→              </div>
+   607→              <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mt-2">Progresso Total</div>
+   608→            </div>
+   609→
+   610→            {/* Time stats */}
+   611→            <div className="grid grid-cols-2 gap-3">
+   612→              <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-center">
+   613→                <div className="text-lg font-bold text-foreground">{fmtTime(elapsed)}</div>
+   614→                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Decorrido</div>
+   615→              </div>
+   616→              <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-center">
+   617→                <div className="text-lg font-bold text-accent">{etaSec > 0 ? `~${fmtTime(etaSec)}` : "--"}</div>
+   618→                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Restante</div>
+   619→              </div>
+   620→            </div>
+   621→
+   622→            {/* Scene counter */}
+   623→            <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+   624→              <div className="flex items-center justify-between text-xs mb-2">
+   625→                <span className="text-muted-foreground">Cenas</span>
+   626→                <span className="font-bold">{state.completed}/{state.total}</span>
+   627→              </div>
+   628→              <div className="flex gap-1">
+   629→                {Array.from({ length: state.total }, (_, i) => {
+   630→                  const done = i < state.completed;
+   631→                  const active = i === state.currentIndex;
+   632→                  const ffmpegPct = active && isRendering ? (state.ffmpegPct ?? 0) : 0;
+   633→                  return (
+   634→                    <div
+   635→                      key={i}
+   636→                      className={`flex-1 h-2 rounded-full transition-all duration-500 relative overflow-hidden ${
+   637→                        done ? "bg-green-400" : active ? "bg-white/10" : "bg-white/10"
+   638→                      }`}
+   639→                    >
+   640→                      {active && isRendering && (
+   641→                        <div
+   642→                          className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary to-accent transition-all duration-200"
+   643→                          style={{ width: `${Math.max(ffmpegPct, 5)}%` }}
+   644→                        />
+   645→                      )}
+   646→                      {active && !isRendering && (
+   647→                        <div className="absolute inset-0 rounded-full bg-primary animate-pulse" />
+   648→                      )}
+   649→                    </div>
+   650→                  );
+   651→                })}
+   652→              </div>
+   653→            </div>
+   654→
+   655→            {/* Audio waveform */}
+   656→            <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+   657→              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Audio</div>
+   658→              <AudioWaveform playing={isRendering} color="#a78bfa" />
+   659→            </div>
+   660→          </div>
+   661→        </div>
+   662→
+   663→        {/* Progress bar with glow */}
+   664→        <div className="space-y-2">
+   665→          <div className="relative h-3 rounded-full bg-white/10 overflow-hidden">
+   666→            <div
+   667→              className="h-full rounded-full bg-gradient-to-r from-primary via-accent to-primary transition-all duration-300 ease-out relative"
+   668→              style={{ width: `${progress}%` }}
+   669→            >
+   670→              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-[shimmer_2s_ease-in-out_infinite]" />
+   671→            </div>
+   672→            {/* Glow dot */}
+   673→            <div
+   674→              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-accent shadow-lg shadow-accent/60 transition-all duration-300 ease-out"
+   675→              style={{ left: `calc(${progress}% - 8px)` }}
+   676→            />
+   677→          </div>
+   678→          <div className="flex justify-between text-[10px] text-muted-foreground">
+   679→            <span>{state.message}</span>
+   680→            {state.downloadItem && (
+   681→              <span className="text-primary flex items-center gap-1">
+   682→                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+   683→                {state.downloadItem} {state.downloadPct > 0 && `${state.downloadPct}%`}
+   684→              </span>
+   685→            )}
+   686→          </div>
+   687→        </div>
+   688→
+   689→        {/* Film strip timeline */}
+   690→        <div className="relative">
+   691→          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+   692→            {Array.from({ length: state.total }, (_, i) => {
+   693→              const done = i < state.completed;
+   694→              const active = i === state.currentIndex;
+   695→              const img = images[i]?.url;
+   696→              return (
+   697→                <div
+   698→                  key={i}
+   699→                  className={`relative shrink-0 w-24 sm:w-28 rounded-lg overflow-hidden border-2 transition-all duration-500 ${
+   700→                    done
+   701→                      ? "border-green-400/60 ring-1 ring-green-400/30"
+   702→                      : active
+   703→                        ? "border-primary ring-2 ring-primary/50 scale-105 shadow-lg shadow-primary/30"
+   704→                        : "border-white/10 opacity-40"
+   705→                  }`}
+   706→                >
+   707→                  <div className="aspect-video bg-black/60 flex items-center justify-center relative">
+   708→                    {img ? (
+   709→                      <img src={img} alt={`Cena ${i + 1}`} className="w-full h-full object-cover" />
+   710→                    ) : (
+   711→                      <Film className="w-5 h-5 text-muted-foreground/40" />
+   712→                    )}
+   713→                    {active && isRendering && (
+   714→                      <>
+   715→                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/25 to-transparent animate-[shimmer_1.5s_ease-in-out_infinite]" />
+   716→                        {/* Real-time ffmpeg progress overlay */}
+   717→                        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/60">
+   718→                          <div
+   719→                            className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-200 ease-out"
+   720→                            style={{ width: `${state.ffmpegPct ?? 0}%` }}
+   721→                          />
+   722→                        </div>
+   723→                        <div className="absolute bottom-2 right-1.5 text-[9px] font-bold text-white bg-black/70 rounded px-1.5 py-0.5 backdrop-blur-sm">
+   724→                          {state.ffmpegPct ?? 0}%
+   725→                        </div>
+   726→                      </>
+   727→                    )}
+   728→                    {done && !active && (
+   729→                      <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
+   730→                        <Check className="w-5 h-5 text-green-400" />
+   731→                      </div>
+   732→                    )}
+   733→                    {active && !isRendering && (
+   734→                      <div className="absolute inset-0 border-2 border-primary/30 animate-pulse rounded-lg" />
+   735→                    )}
+   736→                  </div>
+   737→                  <div className={`text-center text-[10px] py-0.5 font-medium ${
+   738→                    done ? "bg-green-500/15 text-green-300" : active ? "bg-primary/20 text-primary" : "bg-black/40 text-muted-foreground"
+   739→                  }`}>
+   740→                    {active ? `> ${i + 1}` : done ? `+ ${i + 1}` : `${i + 1}`}
+   741→                  </div>
+   742→                </div>
+   743→              );
+   744→            })}
+   745→          </div>
+   746→        </div>
+   747→
+   748→        {/* Live log (collapsible) */}
+   749→        {state.logs.length > 0 && (
+   750→          <details open className="rounded-xl bg-black/60 border border-white/5 overflow-hidden">
+   751→            <summary className="cursor-pointer hover:bg-white/5 transition flex items-center gap-2 px-4 py-2.5 text-xs text-muted-foreground">
+   752→              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+   753→              Log ao vivo ({state.logs.length})
+   754→            </summary>
+   755→            <div className="px-4 pb-3 font-mono space-y-0.5 max-h-28 overflow-y-auto scrollbar-thin">
+   756→              {state.logs.map((log, i) => (
+   757→                <div key={`${log}-${i}`} className="truncate text-[10px] leading-relaxed text-muted-foreground/80">
+   758→                  <span className="text-muted-foreground/40 mr-2">{String(i + 1).padStart(2, "0")}</span>
+   759→                  {log}
+   760→                </div>
+   761→              ))}
+   762→            </div>
+   763→          </details>
+   764→        )}
+   765→      </div>
+   766→    </div>
+   767→  );
+   768→}
+   769→
+   770→function Studio() {
+   771→  const [topic, setTopic] = useState("");
+   772→  const [count, setCount] = useState(8);
+   773→  const [loading, setLoading] = useState(false);
+   774→  const [script, setScript] = useState<Script | null>(null);
+   775→  const [images, setImages] = useState<Record<number, { url: string; final: boolean; modelUsed?: string }>>({});
+   776→  const [audios, setAudios] = useState<Record<number, string>>({});
+   777→  const [videos, setVideos] = useState<Record<number, { url: string; modelUsed?: string }>>({});
+   778→  const [busy, setBusy] = useState<Record<string, boolean>>({});
+   779→  const [assembling, setAssembling] = useState(false);
+   780→  const [assembleMsg, setAssembleMsg] = useState("");
+   781→  const [assembleProgress, setAssembleProgress] = useState<AssembleProgressState | null>(null);
+   782→  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+   783→  const [thumbnail, setThumbnail] = useState<string | null>(null);
+   784→  const [thumbBusy, setThumbBusy] = useState(false);
+   785→  const [voice, setVoice] = useState<VoiceId>("onyx");
+   786→  const [voiceTouched, setVoiceTouched] = useState(false);
+   787→  const [history, setHistory] = useState<HistoryItem[]>([]);
+   788→
+   789→  useEffect(() => {
+   790→    try {
+   791→      const raw = localStorage.getItem(LS_HISTORY);
+   792→      if (raw) setHistory(JSON.parse(raw));
+   793→    } catch { /* noop */ }
+   794→  }, []);
+   795→
+   796→  function saveHistory(next: HistoryItem[]) {
+   797→    setHistory(next);
+   798→    localStorage.setItem(LS_HISTORY, JSON.stringify(next.slice(-50)));
+   799→  }
+   800→
+   801→  useEffect(() => {
+   802→    if (!voiceTouched && topic.trim().length > 4) {
+   803→      setVoice(suggestVoice(topic));
+   804→    }
+   805→  }, [topic, voiceTouched]);
+   806→
+   807→  async function onGenerate(e: React.FormEvent) {
+   808→    e.preventDefault();
+   809→    if (!topic.trim()) return;
+   810→    setLoading(true); setScript(null); setImages({}); setAudios({});
+   811→    try {
+   812→      const s = await clientScript(topic, count, "pt-BR");
+   813→      setScript(s as Script);
+   814→      saveHistory([...history, {
+   815→        id: crypto.randomUUID(), title: s.title, topic, createdAt: Date.now(), scenes: (s.scenes ?? []).length,
+   816→      }]);
+   817→      toast.success("Roteiro gerado!");
+   818→    } catch (err: any) {
+   819→      toast.error(err.message ?? "Falha ao gerar roteiro");
+   820→    } finally { setLoading(false); }
+   821→  }
+   822→
+   823→  async function genImage(i: number, prompt: string) {
+   824→    setBusy((b) => ({ ...b, [`img${i}`]: true }));
+   825→    try {
+   826→      const result = await clientImage(prompt);
+   827→      const url = `data:${result.mime};base64,${result.b64}`;
+   828→      setImages((im) => ({ ...im, [i]: { url, final: true, modelUsed: result.modelUsed } }));
+   829→    } catch (err: any) {
+   830→      toast.error(`Cena ${i + 1}: ${err.message}`);
+   831→    } finally { setBusy((b) => ({ ...b, [`img${i}`]: false })); }
+   832→  }
+   833→
+   834→  async function genAudio(i: number, text: string) {
+   835→    const cleanText = text.trim();
+   836→    if (!cleanText) {
+   837→      toast.error(`Cena ${i + 1}: narração vazia. Gere o roteiro novamente.`);
+   838→      return;
+   839→    }
+   840→    setBusy((b) => ({ ...b, [`aud${i}`]: true }));
+   841→    try {
+   842→      const blob = await clientTts(cleanText, voice);
+   843→      setAudios((a) => ({ ...a, [i]: URL.createObjectURL(blob) }));
+   844→    } catch (err: any) {
+   845→      toast.error(`Áudio cena ${i + 1}: ${err.message}`);
+   846→    } finally { setBusy((b) => ({ ...b, [`aud${i}`]: false })); }
+   847→  }
+   848→
+   849→  async function genAnimate(i: number, prompt: string) {
+   850→    const img = images[i];
+   851→    if (!img?.final) {
+   852→      toast.error(`Cena ${i + 1}: gere a imagem primeiro.`);
+   853→      return;
+   854→    }
+   855→    setBusy((b) => ({ ...b, [`vid${i}`]: true }));
+   856→    try {
+   857→      const j = await clientAnimate(img.url, prompt, (msg) => toast.info(`Cena ${i + 1}: ${msg}`));
+   858→      setVideos((v) => ({ ...v, [i]: { url: j.videoUrl, modelUsed: j.modelUsed } }));
+   859→      toast.success(`Cena ${i + 1} animada!`);
+   860→    } catch (err: any) {
+   861→      toast.error(`Animar cena ${i + 1}: ${err.message}`, { duration: 8000 });
+   862→    } finally { setBusy((b) => ({ ...b, [`vid${i}`]: false })); }
+   863→  }
+   864→
+   865→  async function genAll() {
+   866→    if (!script) return;
+   867→    for (let i = 0; i < script.scenes.length; i++) {
+   868→      await Promise.all([
+   869→        genImage(i, script.scenes[i].imagePrompt),
+   870→        genAudio(i, sceneNarration(script.scenes[i], i, script.title)),
+   871→      ]);
+   872→    }
+   873→    toast.success("Tudo pronto!");
+   874→  }
+   875→
+   876→  function keySceneIndexes(total: number): number[] {
+   877→    if (total <= 0) return [];
+   878→    if (total <= 3) return Array.from({ length: total }, (_, i) => i);
+   879→    const count = Math.max(2, Math.ceil(total * 0.2)); // ~20%, min 2
+   880→    const set = new Set<number>([0, total - 1]);
+   881→    const middleSlots = count - 2;
+   882→    for (let k = 1; k <= middleSlots; k++) {
+   883→      set.add(Math.round((k * (total - 1)) / (middleSlots + 1)));
+   884→    }
+   885→    return [...set].sort((a, b) => a - b);
+   886→  }
+   887→
+   888→  async function animateKeyScenes() {
+   889→    if (!script) return;
+   890→    const idxs = keySceneIndexes(script.scenes.length);
+   891→    const missing = idxs.filter((i) => !images[i]?.final);
+   892→    if (missing.length) {
+   893→      toast.error(`Gere primeiro as imagens das cenas: ${missing.map((i) => i + 1).join(", ")}`);
+   894→      return;
+   895→    }
+   896→    toast.info(`Animando ${idxs.length} cenas-chave (~${(idxs.length * 0.05).toFixed(2)} USD)…`);
+   897→    for (const i of idxs) {
+   898→      if (videos[i]) continue;
+   899→      await genAnimate(i, script.scenes[i].imagePrompt);
+   900→    }
+   901→    toast.success("Cenas-chave animadas!");
+   902→  }
+   903→
+   904→  async function genThumbnail() {
+   905→    if (!script) return;
+   906→    setThumbBusy(true);
+   907→    setThumbnail(null);
+   908→    try {
+   909→      // Brand identity capturada do canal (via /api/trends analisar)
+   910→      let brand: { primaryColor?: string; strokeColor?: string; moodKeywords?: string; fontStyle?: string } = {};
+   911→      try { brand = JSON.parse(localStorage.getItem("aidc.brand") ?? "{}"); } catch { /* noop */ }
+   912→      const fillColor = brand.primaryColor || "#FFEA00";
+   913→      const strokeColor = brand.strokeColor || "#000000";
+   914→      const mood = brand.moodKeywords || "dark cinematic, high contrast, moody";
+   915→      const fontFam = brand.fontStyle === "serif"
+   916→        ? "'Georgia', 'Times New Roman', serif"
+   917→        : brand.fontStyle === "condensed"
+   918→          ? "'Bebas Neue', 'Oswald', 'Impact', sans-serif"
+   919→          : "'Impact', 'Arial Black', sans-serif";
+   920→
+   921→      const prompt = (script.thumbnailPrompt || `dark dramatic YouTube thumbnail about ${script.title}, cinematic, high contrast, no text, 16:9`) + `, ${mood}`;
+   922→      let baseUrl = "";
+   923→      const thumbResult = await clientImage(prompt);
+   924→      baseUrl = `data:${thumbResult.mime};base64,${thumbResult.b64}`;
+   925→      if (!baseUrl) throw new Error("Sem imagem base");
+   926→
+   927→      const img = new Image();
+   928→      img.crossOrigin = "anonymous";
+   929→      await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error("Falha ao carregar imagem")); img.src = baseUrl; });
+   930→
+   931→      const canvas = document.createElement("canvas");
+   932→      canvas.width = 1280; canvas.height = 720;
+   933→      const ctx = canvas.getContext("2d")!;
+   934→      const scale = Math.max(1280 / img.width, 720 / img.height);
+   935→      const dw = img.width * scale, dh = img.height * scale;
+   936→      ctx.drawImage(img, (1280 - dw) / 2, (720 - dh) / 2, dw, dh);
+   937→      const grad = ctx.createLinearGradient(0, 300, 0, 720);
+   938→      grad.addColorStop(0, "rgba(0,0,0,0)");
+   939→      grad.addColorStop(1, "rgba(0,0,0,0.85)");
+   940→      ctx.fillStyle = grad;
+   941→      ctx.fillRect(0, 0, 1280, 720);
+   942→
+   943→      const text = (script.thumbnailText || script.title).toUpperCase().slice(0, 45);
+   944→      const words = text.split(" ");
+   945→      const lines: string[] = [];
+   946→      let cur = "";
+   947→      ctx.font = `900 96px ${fontFam}`;
+   948→      for (const w of words) {
+   949→        const test = cur ? cur + " " + w : w;
+   950→        if (ctx.measureText(test).width > 1180 && cur) { lines.push(cur); cur = w; } else { cur = test; }
+   951→      }
+   952→      if (cur) lines.push(cur);
+   953→
+   954→      const lineH = 100;
+   955→      const startY = 720 - 60 - (lines.length - 1) * lineH;
+   956→      ctx.textAlign = "center";
+   957→      ctx.textBaseline = "bottom";
+   958→      lines.forEach((ln, idx) => {
+   959→        const y = startY + idx * lineH;
+   960→        ctx.lineWidth = 12;
+   961→        ctx.strokeStyle = strokeColor;
+   962→        ctx.strokeText(ln, 640, y);
+   963→        ctx.fillStyle = fillColor;
+   964→        ctx.fillText(ln, 640, y);
+   965→      });
+   966→
+   967→      const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+   968→      setThumbnail(dataUrl);
+   969→      toast.success(brand.primaryColor ? "Thumbnail gerada com identidade do canal!" : "Thumbnail gerada!");
+   970→    } catch (err: any) {
+   971→      toast.error(`Thumbnail: ${err.message}`);
+   972→    } finally { setThumbBusy(false); }
+   973→  }
+   974→
+   975→  async function onAssemble() {
+   976→    if (!script) return;
+   977→    const missing = script.scenes.some((_, i) => !images[i]?.final || !audios[i]);
+   978→    if (missing) {
+   979→      toast.error("Gere imagem e áudio de todas as cenas primeiro.");
+   980→      return;
+   981→    }
+   982→    const initialProgress: AssembleProgressState = { message: "Iniciando...", phase: "Preparando", currentIndex: null, total: script.scenes.length, completed: 0, logs: [], startTime: Date.now(), downloadItem: "", downloadPct: 0, scenePct: 0, ffmpegPct: 0 };
+   983→    setAssembling(true);
+   984→    setAssembleMsg("Iniciando…");
+   985→    setAssembleProgress(initialProgress);
+   986→    setVideoUrl(null);
+   987→    try {
+   988→      const blob = await assembleVideo(
+   989→        script.scenes.map((_, i) => ({ imageUrl: images[i].url, audioUrl: audios[i], videoUrl: videos[i]?.url })),
+   990→        (message, event) => {
+   991→          setAssembleMsg(message);
+   992→          setAssembleProgress((prev) => updateAssembleProgress(prev ?? initialProgress, message, event));
+   993→        },
+   994→      );
+   995→      setVideoUrl(URL.createObjectURL(blob));
+   996→      toast.success("Vídeo pronto!");
+   997→    } catch (err: any) {
+   998→      console.error("[assemble]", err);
+   999→      toast.error(err?.message ?? "Falha ao montar vídeo", { duration: 8000 });
+  1000→    } finally {
+  1001→      setAssembling(false);
+  1002→    }
+  1003→  }
+  1004→
+  1005→  return (
+  1006→    <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
+  1007→      <div className="fixed inset-0 pointer-events-none opacity-40">
+  1008→        <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full bg-primary/20 blur-[120px]" />
+  1009→        <div className="absolute bottom-0 right-1/4 w-96 h-96 rounded-full bg-accent/20 blur-[120px]" />
+  1010→      </div>
+  1011→      <header className="relative border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 backdrop-blur-md bg-background/60 sticky top-0 z-20">
+  1012→        <Link to="/" className="font-bold text-base sm:text-lg flex items-center gap-2 shrink-0 min-w-0">
+  1013→          <Sparkles className="w-5 h-5 text-primary shrink-0" />
+  1014→          <span className="truncate">AIDarkCesar</span>
+  1015→        </Link>
+  1016→        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+  1017→          <BalanceWidget />
+  1018→          <span className="hidden sm:inline text-xs uppercase tracking-widest text-muted-foreground">Studio</span>
+  1019→        </div>
+  1020→      </header>
+  1021→
+  1022→      <main className="relative max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-6 sm:space-y-8">
+  1023→        <div className="text-center space-y-3">
+  1024→          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs">
+  1025→            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+  1026→            Agente IA online — pronto para criar
+  1027→          </div>
+  1028→          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-primary to-accent bg-clip-text text-transparent">
+  1029→            Studio Dark YouTube
+  1030→          </h1>
+  1031→          <p className="text-muted-foreground max-w-xl mx-auto">
+  1032→            Roteiro, narração e imagens cinematográficas geradas por IA — prontas para render em MP4.
+  1033→          </p>
+  1034→        </div>
+  1035→
+  1036→        <form onSubmit={onGenerate} className="space-y-3 rounded-2xl border border-white/10 bg-white/5 backdrop-blur p-4 sm:p-6 shadow-2xl">
+  1037→          <label className="block text-sm font-medium">Tema do vídeo</label>
+  1038→          <textarea
+  1039→            value={topic} onChange={(e) => setTopic(e.target.value)}
+  1040→            placeholder="Ex.: A verdadeira história por trás da casa mais assombrada dos EUA"
+  1041→            className="w-full min-h-24 rounded-lg bg-black/40 border border-white/10 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition"
+  1042→          />
+  1043→          <div className="flex flex-wrap items-center gap-3">
+  1044→            <label className="text-sm flex items-center gap-1 shrink-0"><Film className="w-4 h-4" />Cenas:</label>
+  1045→            <div className="inline-flex items-stretch rounded-md border border-white/10 bg-black/40 overflow-hidden shrink-0">
+  1046→              <button
+  1047→                type="button"
+  1048→                aria-label="Diminuir cenas"
+  1049→                onClick={() => setCount(Math.max(1, (Number(count) || 1) - 1))}
+  1050→                className="px-3 text-lg leading-none hover:bg-white/10 active:bg-white/20 select-none"
+  1051→              >−</button>
+  1052→              <input
+  1053→                type="number" inputMode="numeric" min={1} max={50} value={count}
+  1054→                onChange={(e) => {
+  1055→                  const v = e.target.value;
+  1056→                  if (v === "") { setCount(0 as any); return; }
+  1057→                  const n = parseInt(v, 10);
+  1058→                  if (!isNaN(n)) setCount(Math.min(50, Math.max(1, n)));
+  1059→                }}
+  1060→                onBlur={(e) => { const n = parseInt(e.target.value, 10); if (isNaN(n) || n < 3) setCount(8); }}
+  1061→                className="w-14 text-center bg-transparent border-x border-white/10 p-2 text-sm focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+  1062→              />
+  1063→              <button
+  1064→                type="button"
+  1065→                aria-label="Aumentar cenas"
+  1066→                onClick={() => setCount(Math.min(50, (Number(count) || 0) + 1))}
+  1067→                className="px-3 text-lg leading-none hover:bg-white/10 active:bg-white/20 select-none"
+  1068→              >+</button>
+  1069→            </div>
+  1070→            <button disabled={loading} className="w-full sm:w-auto sm:ml-auto rounded-lg btn-blue-gradient px-5 py-2.5 text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2">
+  1071→              {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Gerando…</> : <><Wand2 className="w-4 h-4" />Gerar roteiro</>}
+  1072→            </button>
+  1073→          </div>
+  1074→
+  1075→          <div className="flex items-center gap-3 flex-wrap pt-1">
+  1076→            <label className="text-sm flex items-center gap-1"><Mic2 className="w-4 h-4" />Voz:</label>
+  1077→            <select
+  1078→              value={voice}
+  1079→              onChange={(e) => { setVoice(e.target.value as VoiceId); setVoiceTouched(true); }}
+  1080→              className="rounded-md bg-black/40 border border-white/10 p-2 text-sm flex-1 min-w-56"
+  1081→            >
+  1082→              {VOICES.map((v) => (
+  1083→                <option key={v.id} value={v.id}>{v.label} — {v.desc}</option>
+  1084→              ))}
+  1085→            </select>
+  1086→            {!voiceTouched && topic.trim().length > 4 && (
+  1087→              <span className="text-xs text-primary/80 flex items-center gap-1">
+  1088→                <Sparkles className="w-3 h-3" /> sugerida pelo tema
+  1089→              </span>
+  1090→            )}
+  1091→          </div>
+  1092→        </form>
+  1093→
+  1094→        {loading && <AgentWorkingPreview modelUsed={script?.modelUsed} />}
+  1095→
+  1096→        {!loading && (
+  1097→          <ChannelPlanner
+  1098→            onPick={(t) => { setTopic(t); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+  1099→            history={history}
+  1100→            onDeleteHistory={(id) => saveHistory(history.filter((h) => h.id !== id))}
+  1101→          />
+  1102→        )}
+  1103→
+  1104→        {script && (
+  1105→          <section className="space-y-6">
+  1106→            <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+  1107→              {script.notice && (
+  1108→                <div className="mb-4 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+  1109→                  {script.notice}
+  1110→                </div>
+  1111→              )}
+  1112→              <div className="flex items-center justify-between gap-3 flex-wrap">
+  1113→                <div className="text-xs uppercase text-muted-foreground">Título</div>
+  1114→                {script.modelUsed && (
+  1115→                  <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+  1116→                    <Sparkles className="w-3 h-3" /> Roteiro por {script.modelUsed}
+  1117→                  </span>
+  1118→                )}
+  1119→              </div>
+  1120→              <h2 className="text-xl font-semibold">{script.title}</h2>
+  1121→              {script.seoTitle && (
+  1122→                <>
+  1123→                  <div className="mt-3 text-xs uppercase text-muted-foreground flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Título SEO ({script.seoTitle.length}/70)</div>
+  1124→                  <p className="text-sm font-medium text-primary">{script.seoTitle}</p>
+  1125→                </>
+  1126→              )}
+  1127→              <div className="mt-3 text-xs uppercase text-muted-foreground">Hook</div>
+  1128→              <p className="text-sm">{script.hook}</p>
+  1129→              {script.tags && script.tags.length > 0 && (
+  1130→                <>
+  1131→                  <div className="mt-3 text-xs uppercase text-muted-foreground">Tags SEO ({script.tags.length})</div>
+  1132→                  <div className="flex flex-wrap gap-1 mt-1">
+  1133→                    {script.tags.map((t) => (
+  1134→                      <span key={t} className="text-[10px] rounded-full bg-white/10 border border-white/10 px-2 py-0.5">{t}</span>
+  1135→                    ))}
+  1136→                  </div>
+  1137→                </>
+  1138→              )}
+  1139→              <div className="mt-4 flex flex-wrap gap-3">
+  1140→                <button onClick={genAll} className="rounded-md btn-blue-gradient px-4 py-2 text-sm font-medium">
+  1141→                  Gerar todas imagens + áudios
+  1142→                </button>
+  1143→                <button
+  1144→                  onClick={genThumbnail}
+  1145→                  disabled={thumbBusy}
+  1146→                  className="rounded-md border border-primary/40 bg-primary/20 hover:bg-primary/30 text-primary px-4 py-2 text-sm font-medium disabled:opacity-50"
+  1147→                >
+  1148→                  {thumbBusy ? "🎨 Gerando thumb…" : thumbnail ? "🎨 Regerar Thumbnail" : "🎨 Gerar Thumbnail"}
+  1149→                </button>
+  1150→                <button
+  1151→                  onClick={animateKeyScenes}
+  1152→                  className="rounded-md border border-accent/40 bg-accent/20 hover:bg-accent/30 text-accent px-4 py-2 text-sm font-medium"
+  1153→                >
+  1154→                  🚀 Animar cenas-chave (~{(keySceneIndexes(script.scenes.length).length * 0.05).toFixed(2)} USD)
+  1155→                </button>
+  1156→                <button
+  1157→                  onClick={onAssemble}
+  1158→                  disabled={assembling}
+  1159→                  className="rounded-md btn-blue-gradient px-4 py-2 text-sm font-medium disabled:opacity-50"
+  1160→                >
+  1161→                  {assembling ? `Montando… ${assembleMsg}` : "Montar Vídeo"}
+  1162→                </button>
+  1163→              </div>
+  1164→              {thumbnail && (
+  1165→                <div className="mt-4 space-y-2">
+  1166→                  <div className="text-xs uppercase text-muted-foreground">Thumbnail 1280x720</div>
+  1167→                  <img src={thumbnail} alt="Thumbnail" className="w-full max-w-md rounded-lg border border-white/10" />
+  1168→                  <a href={thumbnail} download="thumbnail.jpg" className="text-xs underline">Baixar thumbnail JPG</a>
+  1169→                </div>
+  1170→              )}
+  1171→              {assembling && assembleProgress && <AssembleProgress state={assembleProgress} images={images} />}
+  1172→              {videoUrl && (
+  1173→                <div className="mt-4 space-y-2">
+  1174→                  <video controls src={videoUrl} className="w-full rounded-md" />
+  1175→                  <div className="flex flex-wrap gap-2">
+  1176→                    <a href={videoUrl} download="video-final.webm" className="inline-block rounded-md btn-blue-gradient px-4 py-2 text-sm font-medium">
+  1177→                      ⬇ Baixar vídeo final
+  1178→                    </a>
+  1179→                    <PublishToMake videoUrl={videoUrl} script={script} thumbnail={thumbnail} />
+  1180→                  </div>
+  1181→                </div>
+  1182→              )}
+  1183→            </div>
+  1184→
+  1185→            <div className="space-y-4">
+  1186→              {script.scenes.map((sc, i) => (
+  1187→                <div
+  1188→                  key={i}
+  1189→                  className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-3 animate-fade-in hover:border-primary/30 hover:bg-white/[0.07] transition"
+  1190→                  style={{ animationDelay: `${i * 60}ms`, animationFillMode: "backwards" }}
+  1191→                >
+  1192→                  <div className="flex items-center justify-between gap-2">
+  1193→                    <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+  1194→                      Cena {i + 1}
+  1195→                      {keySceneIndexes(script.scenes.length).includes(i) && (
+  1196→                        <span className="text-[10px] rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-accent">⭐ chave</span>
+  1197→                      )}
+  1198→                    </div>
+  1199→                    <input
+  1200→                      value={sc.title}
+  1201→                      onChange={(e) => setScript((prev) => prev && { ...prev, scenes: prev.scenes.map((s, idx) => idx === i ? { ...s, title: e.target.value } : s) })}
+  1202→                      className="flex-1 bg-transparent border-b border-white/10 focus:border-primary/60 outline-none font-semibold text-sm py-1"
+  1203→                    />
+  1204→                  </div>
+  1205→                  <textarea
+  1206→                    value={sc.narration}
+  1207→                    onChange={(e) => setScript((prev) => prev && { ...prev, scenes: prev.scenes.map((s, idx) => idx === i ? { ...s, narration: e.target.value } : s) })}
+  1208→                    rows={4}
+  1209→                    className="w-full rounded-md bg-black/30 border border-white/10 focus:border-primary/60 outline-none p-2 text-sm leading-relaxed resize-y"
+  1210→                    placeholder="Narração da cena…"
+  1211→                  />
+  1212→                  <details className="text-xs text-muted-foreground">
+  1213→                    <summary className="cursor-pointer">Image prompt (editar)</summary>
+  1214→                    <textarea
+  1215→                      value={sc.imagePrompt}
+  1216→                      onChange={(e) => setScript((prev) => prev && { ...prev, scenes: prev.scenes.map((s, idx) => idx === i ? { ...s, imagePrompt: e.target.value } : s) })}
+  1217→                      rows={2}
+  1218→                      className="mt-1 w-full rounded-md bg-black/30 border border-white/10 focus:border-primary/60 outline-none p-2 text-xs resize-y"
+  1219→                    />
+  1220→                  </details>
+  1221→
+  1222→                  <div className="grid md:grid-cols-2 gap-4">
+  1223→                    <div className="space-y-2">
+  1224→                      <div className="flex flex-wrap gap-2">
+  1225→                        <button
+  1226→                          disabled={busy[`img${i}`]}
+  1227→                          onClick={() => genImage(i, sc.imagePrompt)}
+  1228→                          className="rounded-md bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs disabled:opacity-50"
+  1229→                        >
+  1230→                          {busy[`img${i}`] ? "Gerando imagem…" : images[i] ? "Regenerar imagem" : "Gerar imagem"}
+  1231→                        </button>
+  1232→                        {images[i]?.final && (
+  1233→                          <button
+  1234→                            disabled={busy[`img${i}`]}
+  1235→                            onClick={() => {
+  1236→                              const seed = Math.floor(Math.random() * 9999);
+  1237→                              const variants = ["different angle", "alternative composition", "new lighting", "wider shot", "closer shot", "different mood"];
+  1238→                              const v = variants[seed % variants.length];
+  1239→                              genImage(i, `${sc.imagePrompt}, ${v}, variation ${seed}`);
+  1240→                            }}
+  1241→                            className="rounded-md bg-primary/20 hover:bg-primary/30 border border-primary/40 text-primary px-3 py-1.5 text-xs disabled:opacity-50"
+  1242→                          >
+  1243→                            ✨ Outra imagem
+  1244→                          </button>
+  1245→                        )}
+  1246→                      </div>
+  1247→                      {images[i] && (
+  1248→                        <div className="space-y-2">
+  1249→                          <img
+  1250→                            src={images[i].url}
+  1251→                            className={`w-full rounded-md transition-[filter] ${images[i].final ? "" : "blur-lg"}`}
+  1252→                            alt=""
+  1253→                          />
+  1254→                          {images[i].final && (
+  1255→                            <div className="flex items-center gap-2 flex-wrap">
+  1256→                              <a href={images[i].url} download={`cena-${i + 1}.png`} className="text-xs underline">Baixar PNG</a>
+  1257→                              {images[i].modelUsed && (
+  1258→                                <span className="text-[10px] rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-primary">
+  1259→                                  {images[i].modelUsed}
+  1260→                                </span>
+  1261→                              )}
+  1262→                            </div>
+  1263→                          )}
+  1264→                        </div>
+  1265→                      )}
+  1266→                    </div>
+  1267→                    <div className="space-y-2">
+  1268→                      <button
+  1269→                        disabled={busy[`aud${i}`]}
+  1270→                        onClick={() => genAudio(i, sceneNarration(sc, i, script.title))}
+  1271→                        className="rounded-md bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs disabled:opacity-50"
+  1272→                      >
+  1273→                        {busy[`aud${i}`] ? "Gerando áudio…" : audios[i] ? "Regenerar áudio" : "Gerar narração"}
+  1274→                      </button>
+  1275→                      {audios[i] && (
+  1276→                        <div className="space-y-1">
+  1277→                          <audio controls src={audios[i]} className="w-full" />
+  1278→                          <a href={audios[i]} download={`cena-${i + 1}.mp3`} className="text-xs underline">Baixar MP3</a>
+  1279→                        </div>
+  1280→                      )}
+  1281→                    </div>
+  1282→                  </div>
+  1283→                  {images[i]?.final && (
+  1284→                    <div className="pt-2 border-t border-white/10 space-y-2">
+  1285→                      <button
+  1286→                        disabled={busy[`vid${i}`]}
+  1287→                        onClick={() => genAnimate(i, sc.imagePrompt)}
+  1288→                        className="rounded-md bg-accent/20 hover:bg-accent/30 border border-accent/40 text-accent px-3 py-1.5 text-xs disabled:opacity-50"
+  1289→                      >
+  1290→                        {busy[`vid${i}`] ? "🎬 Animando (Replicate, ~1-2 min)…" : videos[i] ? "🎬 Re-animar cena" : "🎬 Animar cena (dar vida)"}
+  1291→                      </button>
+  1292→                      {videos[i] && (
+  1293→                        <div className="space-y-1">
+  1294→                          <video controls src={videos[i].url} className="w-full rounded-md" />
+  1295→                          <div className="flex items-center gap-2 flex-wrap">
+  1296→                            <a href={videos[i].url} download={`cena-${i + 1}.mp4`} className="text-xs underline">Baixar MP4</a>
+  1297→                            {videos[i].modelUsed && (
+  1298→                              <span className="text-[10px] rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-accent">
+  1299→                                {videos[i].modelUsed}
+  1300→                              </span>
+  1301→                            )}
+  1302→                          </div>
+  1303→                        </div>
+  1304→                      )}
+  1305→                    </div>
+  1306→                  )}
+  1307→                </div>
+  1308→              ))}
+  1309→            </div>
+  1310→
+  1311→            <p className="text-xs text-muted-foreground">
+  1312→              Dica: após gerar todas imagens + áudios, clique em "Montar Vídeo MP4". A render usa Canvas nativo do navegador — rápido, sem download de engine.
+  1313→            </p>
+  1314→          </section>
+  1315→        )}
+  1316→      </main>
+  1317→    </div>
+  1318→  );
+  1319→}
+  1320→
+  1321→const LS_MAKE_WEBHOOK = "aidc.makeWebhook";
+  1322→
+  1323→function PublishToMake({ videoUrl, script, thumbnail }: { videoUrl: string; script: Script; thumbnail?: string | null }) {
+  1324→  const [open, setOpen] = useState(false);
+  1325→  const [webhook, setWebhook] = useState(() => (typeof window !== "undefined" ? localStorage.getItem(LS_MAKE_WEBHOOK) ?? "" : ""));
+  1326→  const [sending, setSending] = useState(false);
+  1327→  const [status, setStatus] = useState("");
+  1328→  const [scheduleMode, setScheduleMode] = useState<"now" | "later">("now");
+  1329→  // datetime-local com valor default = agora + 1h, formatado local
+  1330→  const defaultWhen = useMemo(() => {
+  1331→    const d = new Date(Date.now() + 60 * 60 * 1000);
+  1332→    d.setMinutes(0, 0, 0);
+  1333→    const pad = (n: number) => n.toString().padStart(2, "0");
+  1334→    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  1335→  }, []);
+  1336→  const [when, setWhen] = useState(defaultWhen);
+  1337→
+  1338→  async function uploadToLitterbox(blob: Blob, filename: string) {
+  1339→    const up = new FormData();
+  1340→    up.append("reqtype", "fileupload");
+  1341→    up.append("time", "24h");
+  1342→    up.append("fileToUpload", blob, filename);
+  1343→    const r = await fetch("https://litterbox.catbox.moe/resources/internals/api.php", { method: "POST", body: up });
+  1344→    const url = (await r.text()).trim();
+  1345→    if (!r.ok || !url.startsWith("http")) throw new Error(`Falha ao hospedar ${filename}: ${url.slice(0, 200)}`);
+  1346→    return url;
+  1347→  }
+  1348→
+  1349→  async function publish() {
+  1350→    if (!webhook.startsWith("https://hook.")) {
+  1351→      toast.error("Cole a URL do webhook do Make (começa com https://hook.…)");
+  1352→      return;
+  1353→    }
+  1354→    let publishAtISO = "";
+  1355→    let privacy: "public" | "private" = "public";
+  1356→    if (scheduleMode === "later") {
+  1357→      const dt = new Date(when);
+  1358→      if (isNaN(dt.getTime()) || dt.getTime() < Date.now() + 10 * 60 * 1000) {
+  1359→        toast.error("Escolha uma data/hora pelo menos 10 minutos no futuro.");
+  1360→        return;
+  1361→      }
+  1362→      publishAtISO = dt.toISOString(); // YouTube exige ISO 8601 UTC
+  1363→      privacy = "private"; // requisito do YouTube para agendamento
+  1364→    }
+  1365→
+  1366→    try {
+  1367→      setSending(true);
+  1368→      setStatus("Preparando vídeo…");
+  1369→      localStorage.setItem(LS_MAKE_WEBHOOK, webhook);
+  1370→
+  1371→      toast.info("Hospedando vídeo…");
+  1372→      const videoBlob = await (await fetch(videoUrl)).blob();
+  1373→      setStatus("Subindo MP4…");
+  1374→      const hostedVideoUrl = await uploadToLitterbox(videoBlob, "video-final.mp4");
+  1375→
+  1376→      let hostedThumbUrl = "";
+  1377→      if (thumbnail) {
+  1378→        setStatus("Subindo thumbnail…");
+  1379→        const thumbBlob = await (await fetch(thumbnail)).blob();
+  1380→        hostedThumbUrl = await uploadToLitterbox(thumbBlob, "thumbnail.jpg");
+  1381→      }
+  1382→
+  1383→      toast.info("Enviando ao Make…");
+  1384→      setStatus("Enviando campos ao Make…");
+  1385→      const makePayload = new FormData();
+  1386→      makePayload.append("title", (script.seoTitle || script.title).slice(0, 100));
+  1387→      makePayload.append("description",
+  1388→        (script.seoDescription || `${script.hook}\n\n${script.scenes.map((s) => s.narration).join("\n\n")}`).slice(0, 4900)
+  1389→      );
+  1390→      makePayload.append("tags", (script.tags?.length ? script.tags : ["darkcesar", "mistério", "terror"]).join(","));
+  1391→      makePayload.append("videoUrl", hostedVideoUrl);
+  1392→      makePayload.append("thumbnailUrl", hostedThumbUrl);
+  1393→      makePayload.append("privacyStatus", privacy);
+  1394→      makePayload.append("publishAt", publishAtISO); // vazio = publicar agora
+  1395→      await fetch(webhook, { method: "POST", mode: "no-cors", body: makePayload });
+  1396→      toast.success(
+  1397→        scheduleMode === "later"
+  1398→          ? `Agendado para ${new Date(when).toLocaleString("pt-BR")}`
+  1399→          : "Enviado para publicação imediata!"
+  1400→      );
+  1401→      setOpen(false);
+  1402→    } catch (err: any) {
+  1403→      toast.error(err?.message ?? "Falha ao enviar ao Make", { duration: 9000 });
+  1404→    } finally {
+  1405→      setSending(false);
+  1406→      setStatus("");
+  1407→    }
+  1408→  }
+  1409→
+  1410→  if (!open) {
+  1411→    return (
+  1412→      <button onClick={() => setOpen(true)} className="inline-block rounded-md border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2 text-sm font-medium">
+  1413→        📤 Publicar no YouTube (Make)
+  1414→      </button>
+  1415→    );
+  1416→  }
+  1417→
+  1418→  return (
+  1419→    <div className="w-full rounded-md border border-white/10 bg-white/5 p-3 space-y-3">
+  1420→      <label className="text-xs text-muted-foreground">URL do webhook do Make.com</label>
+  1421→      <input
+  1422→        type="url"
+  1423→        value={webhook}
+  1424→        onChange={(e) => setWebhook(e.target.value)}
+  1425→        placeholder="https://hook.eu2.make.com/abc123..."
+  1426→        className="w-full rounded-md bg-background border border-white/10 px-3 py-2 text-sm"
+  1427→      />
+  1428→
+  1429→      {/* Modo de publicação */}
+  1430→      <div className="flex flex-wrap gap-2">
+  1431→        <button
+  1432→          type="button"
+  1433→          onClick={() => setScheduleMode("now")}
+  1434→          className={`rounded-full px-3 py-1 text-xs border transition ${scheduleMode === "now" ? "bg-primary/30 border-primary/60 text-primary" : "bg-white/5 border-white/10 hover:bg-white/10"}`}
+  1435→        >
+  1436→          🚀 Publicar agora
+  1437→        </button>
+  1438→        <button
+  1439→          type="button"
+  1440→          onClick={() => setScheduleMode("later")}
+  1441→          className={`rounded-full px-3 py-1 text-xs border transition ${scheduleMode === "later" ? "bg-accent/30 border-accent/60 text-accent" : "bg-white/5 border-white/10 hover:bg-white/10"}`}
+  1442→        >
+  1443→          ⏰ Agendar
+  1444→        </button>
+  1445→      </div>
+  1446→
+  1447→      {scheduleMode === "later" && (
+  1448→        <div className="space-y-1 animate-fade-in">
+  1449→          <label className="text-xs text-muted-foreground">Data e hora (fuso local)</label>
+  1450→          <input
+  1451→            type="datetime-local"
+  1452→            value={when}
+  1453→            onChange={(e) => setWhen(e.target.value)}
+  1454→            min={defaultWhen}
+  1455→            className="w-full rounded-md bg-background border border-white/10 px-3 py-2 text-sm"
+  1456→          />
+  1457→        </div>
+  1458→      )}
+  1459→
+  1460→      <div className="flex flex-wrap gap-2">
+  1461→        <button onClick={publish} disabled={sending} className="rounded-md btn-blue-gradient px-4 py-2 text-sm font-medium disabled:opacity-50">
+  1462→          {sending ? "Enviando…" : scheduleMode === "later" ? "Agendar no YouTube" : "Publicar agora"}
+  1463→        </button>
+  1464→        <button onClick={() => setOpen(false)} className="rounded-md border border-white/20 px-4 py-2 text-sm">Cancelar</button>
+  1465→      </div>
+  1466→      {status && <p className="text-[11px] text-primary">{status}</p>}
+  1467→      <div className="text-[11px] text-muted-foreground space-y-1 leading-relaxed">
+  1468→        <p>
+  1469→          O Make recebe campos extras: <code>privacyStatus</code> (<i>public</i> ou <i>private</i>) e <code>publishAt</code> (ISO 8601, vazio = agora).
+  1470→        </p>
+  1471→        <p>
+  1472→          <b>Para agendamento funcionar</b>, no módulo <b>YouTube → Upload a Video</b> mapeie:
+  1473→          <br />• <b>Privacy Status</b> = <code>{`{{1.privacyStatus}}`}</code>
+  1474→          <br />• <b>Publish At</b> = <code>{`{{1.publishAt}}`}</code> (deixe vazio se for "agora")
+  1475→        </p>
+  1476→      </div>
+  1477→    </div>
+  1478→  );
+  1479→}

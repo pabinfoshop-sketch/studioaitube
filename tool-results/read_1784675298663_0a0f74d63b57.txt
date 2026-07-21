@@ -1,0 +1,502 @@
+     1→     1→     1→import { createFileRoute, Link } from "@tanstack/react-router";
+     2→     2→     2→import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+     3→     3→     3→import { createPortal } from "react-dom";
+     4→     4→     4→import { toast } from "sonner";
+     5→     5→     5→import { assembleVideo, type AssembleEvent } from "@/lib/assembleVideo";
+     6→     6→     6→import { clientBalance, clientScript, clientImage, clientTts, clientAnimate, saveKeysToLocalStorage, getCurrentKeys } from "@/lib/ai-client";
+     7→     7→     7→import { Sparkles, Wand2, Film, Mic2, Image as ImageIcon, Loader2, TrendingUp, Settings, Eye, EyeOff, Check, X } from "lucide-react";
+     8→     8→     8→import { ChannelPlanner, type HistoryItem } from "@/components/ChannelPlanner";
+     9→     9→     9→
+    10→    10→    10→const LS_HISTORY = "aidc.history";
+    11→    11→    11→
+    12→    12→    12→export const Route = createFileRoute("/studio")({
+    13→    13→    13→  component: Studio,
+    14→    14→    14→  head: () => ({
+    15→    15→    15→    meta: [
+    16→    16→    16→      { title: "AIDarkCesar Studio — Gerar roteiro, narração e cenas" },
+    17→    17→    17→      { name: "description", content: "Gere roteiros dark, narração TTS e imagens cinematográficas por cena para seu canal do YouTube." },
+    18→    18→    18→    ],
+    19→    19→    19→  }),
+    20→    20→    20→});
+    21→    21→    21→
+    22→    22→    22→type Scene = { title: string; narration: string; imagePrompt: string };
+    23→    23→    23→type Script = {
+    24→    24→    24→  title: string; hook: string; scenes: Scene[]; notice?: string; modelUsed?: string;
+    25→    25→    25→  seoTitle?: string; seoDescription?: string; tags?: string[];
+    26→    26→    26→  thumbnailPrompt?: string; thumbnailText?: string;
+    27→    27→    27→};
+    28→    28→    28→type AssembleProgressState = {
+    29→    29→    29→  message: string;
+    30→    30→    30→  phase: string;
+    31→    31→    31→  currentIndex: number | null;
+    32→    32→    32→  total: number;
+    33→    33→    33→  completed: number;
+    34→    34→    34→  logs: string[];
+    35→    35→    35→  startTime: number;
+    36→    36→    36→  downloadItem: string;
+    37→    37→    37→  downloadPct: number;
+    38→    38→    38→  scenePct: number;
+    39→    39→    39→  ffmpegPct: number;
+    40→    40→    40→};
+    41→    41→    41→
+    42→    42→    42→type VoiceId = "onyx" | "echo" | "fable" | "alloy" | "nova" | "shimmer";
+    43→    43→    43→const VOICES: { id: VoiceId; label: string; desc: string; tags: string[] }[] = [
+    44→    44→    44→  { id: "onyx", label: "Onyx — grave e sombrio", desc: "Ideal para terror, mistério, oculto", tags: ["terror", "mistério", "assombr", "sobrenatural", "oculto", "ritual", "amaldiço", "exorcis", "fantasma", "demo", "sombr", "dark"] },
+    45→    45→    45→  { id: "echo", label: "Echo — sério e investigativo", desc: "Ideal para true crime, conspiração", tags: ["crime", "serial", "killer", "assassin", "caso", "polic", "conspir", "desaparec", "investig", "secret"] },
+    46→    46→    46→  { id: "fable", label: "Fable — narrador clássico", desc: "Ideal para lendas, mitologia, história", tags: ["lenda", "mito", "história", "medieval", "antig", "civiliza", "rei", "guerra"] },
+    47→    47→    47→  { id: "alloy", label: "Alloy — neutro e equilibrado", desc: "Uso geral", tags: [] },
+    48→    48→    48→  { id: "nova", label: "Nova — feminina clara", desc: "Documentário leve", tags: [] },
+    49→    49→    49→  { id: "shimmer", label: "Shimmer — feminina suave", desc: "Contos, ASMR", tags: ["asmr", "conto", "sussurr"] },
+    50→    50→    50→];
+    51→    51→    51→
+    52→    52→    52→function suggestVoice(topic: string): VoiceId {
+    53→    53→    53→  const t = topic.toLowerCase();
+    54→    54→    54→  for (const v of VOICES) if (v.tags.some((k) => t.includes(k))) return v.id;
+    55→    55→    55→  return "onyx";
+    56→    56→    56→}
+    57→    57→    57→
+    58→    58→    58→function sceneNarration(scene: Scene, index: number, topic: string) {
+    59→    59→    59→  const clean = scene.narration.trim();
+    60→    60→    60→  if (clean) return clean;
+    61→    61→    61→  return `Na cena ${index + 1}, a história de ${topic || scene.title || "este mistério"} revela uma nova camada sombria. O silêncio do ambiente aumenta a tensão enquanto pequenos detalhes começam a se conectar. Cada pista parece aproximar o público de uma verdade que ninguém queria encontrar.`;
+    62→    62→    62→}
+    63→    63→    63→
+    64→    64→    64→const TRENDING_TOPICS = [
+    65→    65→    65→  { emoji: "👻", title: "A verdadeira história do Hotel Cecil", tag: "Mistério" },
+    66→    66→    66→  { emoji: "🔪", title: "O caso Elisa Lam: o que ninguém contou", tag: "True Crime" },
+    67→    67→    67→  { emoji: "🌑", title: "Rituais esquecidos da Idade Média", tag: "Oculto" },
+    68→    68→    68→  { emoji: "🕯️", title: "Lugares mais assombrados do Brasil", tag: "Sobrenatural" },
+    69→    69→    69→  { emoji: "👁️", title: "Sociedades secretas que mudaram o mundo", tag: "Conspiração" },
+    70→    70→    70→  { emoji: "🩸", title: "Serial killers que nunca foram capturados", tag: "True Crime" },
+    71→    71→    71→  { emoji: "🌌", title: "Desaparecimentos inexplicáveis no Triângulo das Bermudas", tag: "Mistério" },
+    72→    72→    72→  { emoji: "⛪", title: "Exorcismos reais documentados pela Igreja", tag: "Sobrenatural" },
+    73→    73→    73→  { emoji: "🏚️", title: "A cidade fantasma que apareceu do nada", tag: "Mistério" },
+    74→    74→    74→  { emoji: "📼", title: "Fitas VHS amaldiçoadas que causaram mortes", tag: "Terror" },
+    75→    75→    75→];
+    76→    76→    76→
+    77→    77→    77→const AGENT_STEPS = [
+    78→    78→    78→  "Pesquisando o tema…",
+    79→    79→    79→  "Estruturando arco narrativo…",
+    80→    80→    80→  "Escrevendo o gancho de abertura…",
+    81→    81→    81→  "Desenvolvendo as cenas…",
+    82→    82→    82→  "Refinando atmosfera cinematográfica…",
+    83→    83→    83→  "Gerando prompts visuais…",
+    84→    84→    84→  "Finalizando o roteiro…",
+    85→    85→    85→];
+    86→    86→    86→
+    87→    87→    87→function AnimatedBot({ label }: { label?: string }) {
+    88→    88→    88→  return (
+    89→    89→    89→    <div className="relative w-16 h-16">
+    90→    90→    90→      <div className="absolute inset-0 rounded-full bg-primary/30 blur-xl animate-pulse" />
+    91→    91→    91→      <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-2xl animate-[bounce_2s_ease-in-out_infinite]">
+    92→    92→    92→        <div className="relative w-10 h-10 rounded-xl bg-black/70 flex items-center justify-center">
+    93→    93→    93→          <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-1 h-2 bg-primary rounded-full" />
+    94→    94→    94→          <div className="flex gap-1.5">
+    95→    95→    95→            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+    96→    96→    96→            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse [animation-delay:200ms]" />
+    97→    97→    97→          </div>
+    98→    98→    98→          <span className="absolute bottom-1 w-3 h-0.5 bg-primary/70 rounded animate-pulse" />
+    99→    99→    99→        </div>
+   100→   100→   100→      </div>
+   101→   101→   101→      {label && (
+   102→   102→   102→        <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] uppercase tracking-widest text-primary/90">
+   103→   103→   103→          {label}
+   104→   104→   104→        </div>
+   105→   105→   105→      )}
+   106→   106→   106→    </div>
+   107→   107→   107→  );
+   108→   108→   108→}
+   109→   109→   109→
+   110→   110→   110→type BalanceResp = {
+   111→   111→   111→  free?: { ok: boolean; statusLabel?: string; error?: string };
+   112→   112→   112→  lovable?: { ok: boolean; statusLabel?: string; error?: string };
+   113→   113→   113→  openrouter: { ok: boolean; balanceUsd?: number; usageUsd?: number; limitUsd?: number | null; statusLabel?: string; isFreeTier?: boolean; error?: string };
+   114→   114→   114→  replicate: { ok: boolean; raw?: any; statusLabel?: string; error?: string };
+   115→   115→   115→  order?: string[];
+   116→   116→   116→};
+   117→   117→   117→
+   118→   118→   118→function BalanceWidget() {
+   119→   119→   119→  const [data, setData] = useState<BalanceResp | null>(null);
+   120→   120→   120→  const [loading, setLoading] = useState(false);
+   121→   121→   121→  const [showSettings, setShowSettings] = useState(false);
+   122→   122→   122→  async function refresh() {
+   123→   123→   123→    setLoading(true);
+   124→   124→   124→    try { setData(await clientBalance() as any); } catch { /* noop */ }
+   125→   125→   125→    finally { setLoading(false); }
+   126→   126→   126→  }
+   127→   127→   127→  useEffect(() => { refresh(); const id = setInterval(refresh, 30_000); return () => clearInterval(id); }, []);
+   128→   128→   128→  const or = data?.openrouter;
+   129→   129→   129→  const rp = data?.replicate;
+   130→   130→   130→  const free = data?.free;
+   131→   131→   131→  const fmt = (n?: number) => (typeof n === "number" ? `$${n.toFixed(2)}` : null);
+   132→   132→   132→  const orLabel = or?.ok
+   133→   133→   133→    ? (fmt(or.balanceUsd) ?? or.statusLabel ?? (or.usageUsd != null ? `usado $${or.usageUsd.toFixed(2)}` : "ok"))
+   134→   134→   134→    : (or?.error ?? "off");
+   135→   135→   135→  const rpLabel = rp?.ok ? (rp.statusLabel ?? "ok") : (rp?.error ?? "off");
+   136→   136→   136→  return (
+   137→   137→   137→    <>
+   138→   138→   138→      <div className="flex items-center gap-1.5">
+   139→   139→   139→        <button
+   140→   140→   140→          onClick={refresh}
+   141→   141→   141→          title={data
+   142→   142→   142→            ? `TTS: ${free?.ok ? "gratuito" : "off"}\nOpenRouter: ${or?.ok ? (or.statusLabel ?? "ok") : (or?.error ?? "off")}\nReplicate: ${rp?.ok ? (rp.statusLabel ?? "ok") : (rp?.error ?? "off")}\n\nClique para atualizar`
+   143→   143→   143→            : "Carregando..."}
+   144→   144→   144→          className="flex items-center gap-2 sm:gap-3 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-[11px] transition min-w-0 max-w-[calc(100vw-10rem)] overflow-hidden"
+   145→   145→   145→        >
+   146→   146→   146→          <span className="flex items-center gap-1.5 min-w-0">
+   147→   147→   147→            <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${free?.ok !== false ? "bg-green-400" : "bg-red-400"} animate-pulse`} />
+   148→   148→   148→            <span className="text-muted-foreground">TTS</span>
+   149→   149→   149→            <span className="font-semibold text-green-400">grátis</span>
+   150→   150→   150→          </span>
+   151→   151→   151→          <span className="w-px h-3 bg-white/10 shrink-0" />
+   152→   152→   152→          <span className="flex items-center gap-1.5 min-w-0">
+   153→   153→   153→            <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${or?.ok ? "bg-green-400" : "bg-red-400"} animate-pulse`} />
+   154→   154→   154→            <span className="hidden sm:inline text-muted-foreground">OR</span>
+   155→   155→   155→            <span className={`font-semibold truncate ${or?.ok ? "text-green-400" : "text-red-400"}`}>{orLabel}</span>
+   156→   156→   156→          </span>
+   157→   157→   157→          <span className="w-px h-3 bg-white/10 shrink-0" />
+   158→   158→   158→          <span className="flex items-center gap-1.5 min-w-0">
+   159→   159→   159→            <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${rp?.ok ? "bg-green-400" : "bg-red-400"} animate-pulse`} />
+   160→   160→   160→            <span className="hidden sm:inline text-muted-foreground">RP</span>
+   161→   161→   161→            <span className={`font-semibold truncate ${rp?.ok ? "text-green-400" : "text-red-400"}`}>{rpLabel}</span>
+   162→   162→   162→          </span>
+   163→   163→   163→          {loading && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+   164→   164→   164→        </button>
+   165→   165→   165→        <button
+   166→   166→   166→          onClick={() => setShowSettings(true)}
+   167→   167→   167→          className="rounded-full border border-white/10 bg-white/5 hover:bg-white/10 p-1.5 transition"
+   168→   168→   168→          title="Configurar API Keys"
+   169→   169→   169→        >
+   170→   170→   170→          <Settings className="w-3.5 h-3.5 text-muted-foreground" />
+   171→   171→   171→        </button>
+   172→   172→   172→      </div>
+   173→   173→   173→      {showSettings && <ApiKeySettingsModal onClose={() => { setShowSettings(false); refresh(); }} />}
+   174→   174→   174→    </>
+   175→   175→   175→  );
+   176→   176→   176→}
+   177→   177→   177→
+   178→   178→   178→function ApiKeySettingsModal({ onClose }: { onClose: () => void }) {
+   179→   179→   179→  const current = getCurrentKeys();
+   180→   180→   180→  const [orKey, setOrKey] = useState(current.openrouter);
+   181→   181→   181→  const [rpKey, setRpKey] = useState(current.replicate);
+   182→   182→   182→  const [elKey, setElKey] = useState(current.elevenlabs);
+   183→   183→   183→  const [showOr, setShowOr] = useState(false);
+   184→   184→   184→  const [showRp, setShowRp] = useState(false);
+   185→   185→   185→  const [showEl, setShowEl] = useState(false);
+   186→   186→   186→  const [saving, setSaving] = useState(false);
+   187→   187→   187→  const [mounted, setMounted] = useState(false);
+   188→   188→   188→  useEffect(() => { setMounted(true); }, []);
+   189→   189→   189→  function save() {
+   190→   190→   190→    setSaving(true);
+   191→   191→   191→    saveKeysToLocalStorage({ openrouter: orKey.trim(), replicate: rpKey.trim(), elevenlabs: elKey.trim() });
+   192→   192→   192→    toast.success("API keys salvas com sucesso!");
+   193→   193→   193→    setTimeout(() => { setSaving(false); onClose(); }, 500);
+   194→   194→   194→  }
+   195→   195→   195→  const content = (
+   196→   196→   196→    <div className="fixed inset-0 z-[9999] flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 pt-16 sm:pt-20 overflow-y-auto" onClick={onClose}>
+   197→   197→   197→      <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl my-auto relative" onClick={(e) => e.stopPropagation()}>
+   198→   198→   198→        <div className="flex items-center justify-between mb-5">
+   199→   199→   199→          <h3 className="text-base font-bold text-white">Configurar API Keys</h3>
+   200→   200→   200→          <button onClick={onClose} className="text-muted-foreground hover:text-white transition"><X className="w-4 h-4" /></button>
+   201→   201→   201→        </div>
+   202→   202→   202→        <p className="text-xs text-muted-foreground mb-4">As keys ficam salvas no seu navegador (localStorage). Se as env vars ja estiverem configuradas no servidor, elas tem prioridade.</p>
+   203→   203→   203→        <div className="space-y-3">
+   204→   204→   204→          <div>
+   205→   205→   205→            <label className="text-[11px] text-muted-foreground mb-1 block">OPENROUTER_API_KEY</label>
+   206→   206→   206→            <div className="flex gap-1.5">
+   207→   207→   207→              <div className="relative flex-1">
+   208→   208→   208→                <input type={showOr ? "text" : "password"} value={orKey} onChange={(e) => setOrKey(e.target.value)} placeholder="sk-or-v1-..." className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-primary/50" />
+   209→   209→   209→                <button onClick={() => setShowOr(!showOr)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white">{showOr ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}</button>
+   210→   210→   210→              </div>
+   211→   211→   211→              {orKey && <span className="flex items-center text-[10px] text-green-400 whitespace-nowrap"><Check className="w-3 h-3" /></span>}
+   212→   212→   212→            </div>
+   213→   213→   213→          </div>
+   214→   214→   214→          <div>
+   215→   215→   215→            <label className="text-[11px] text-muted-foreground mb-1 block">REPLICATE_API_KEY</label>
+   216→   216→   216→            <div className="flex gap-1.5">
+   217→   217→   217→              <div className="relative flex-1">
+   218→   218→   218→                <input type={showRp ? "text" : "password"} value={rpKey} onChange={(e) => setRpKey(e.target.value)} placeholder="r8_..." className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-primary/50" />
+   219→   219→   219→                <button onClick={() => setShowRp(!showRp)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white">{showRp ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}</button>
+   220→   220→   220→              </div>
+   221→   221→   221→              {rpKey && <span className="flex items-center text-[10px] text-green-400 whitespace-nowrap"><Check className="w-3 h-3" /></span>}
+   222→   222→   222→            </div>
+   223→   223→   223→          </div>
+   224→   224→   224→          <div>
+   225→   225→   225→            <label className="text-[11px] text-muted-foreground mb-1 block">ELEVENLABS_API_KEY <span className="text-zinc-600">(opcional)</span></label>
+   226→   226→   226→            <div className="flex gap-1.5">
+   227→   227→   227→              <div className="relative flex-1">
+   228→   228→   228→                <input type={showEl ? "text" : "password"} value={elKey} onChange={(e) => setElKey(e.target.value)} placeholder="xi-..." className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-primary/50" />
+   229→   229→   229→                <button onClick={() => setShowEl(!showEl)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white">{showEl ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}</button>
+   230→   230→   230→              </div>
+   231→   231→   231→              {elKey && <span className="flex items-center text-[10px] text-green-400 whitespace-nowrap"><Check className="w-3 h-3" /></span>}
+   232→   232→   232→            </div>
+   233→   233→   233→          </div>
+   234→   234→   234→        </div>
+   235→   235→   235→        <div className="flex gap-2 mt-5">
+   236→   236→   236→          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-white/10 text-xs text-muted-foreground hover:bg-white/5 transition">Cancelar</button>
+   237→   237→   237→          <button onClick={save} disabled={saving} className="flex-1 py-2 rounded-lg bg-primary text-xs font-semibold text-white hover:bg-primary/90 transition disabled:opacity-50">{saving ? "Salvando..." : "Salvar Keys"}</button>
+   238→   238→   238→        </div>
+   239→   239→   239→      </div>
+   240→   240→   240→    </div>
+   241→   241→   241→  );
+   242→   242→   242→  return mounted ? createPortal(content, document.body) : null;
+   243→   243→   243→}
+   244→   244→   244→
+   245→   245→   245→function AgentWorkingPreview({ modelUsed }: { modelUsed?: string }) {
+   246→   246→   246→  const [step, setStep] = useState(0);
+   247→   247→   247→  useEffect(() => {
+   248→   248→   248→    const id = setInterval(() => setStep((s) => (s + 1) % AGENT_STEPS.length), 1600);
+   249→   249→   249→    return () => clearInterval(id);
+   250→   250→   250→  }, []);
+   251→   251→   251→  return (
+   252→   252→   252→    <div className="rounded-xl border border-white/10 bg-gradient-to-br from-primary/10 via-white/5 to-accent/10 p-6 space-y-4 relative overflow-hidden">
+   253→   253→   253→      <div className="absolute inset-0 opacity-20 pointer-events-none">
+   254→   254→   254→        <div className="absolute -top-16 -left-16 w-64 h-64 rounded-full bg-primary blur-3xl animate-pulse" />
+   255→   255→   255→        <div className="absolute -bottom-16 -right-16 w-64 h-64 rounded-full bg-accent blur-3xl animate-pulse" />
+   256→   256→   256→      </div>
+   257→   257→   257→      <div className="relative flex items-center gap-4">
+   258→   258→   258→        <AnimatedBot />
+   259→   259→   259→        <div className="min-w-0 flex-1">
+   260→   260→   260→          <div className="font-semibold text-sm">Agente AIDarkCesar</div>
+   261→   261→   261→          <div className="text-xs text-muted-foreground">trabalhando no seu roteiro</div>
+   262→   262→   262→          <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+   263→   263→   263→            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+   264→   264→   264→            IA: {modelUsed ?? "selecionando modelo mais barato…"}
+   265→   265→   265→          </div>
+   266→   266→   266→        </div>
+   267→   267→   267→      </div>
+   268→   268→   268→      <div className="relative space-y-2">
+   269→   269→   269→        {AGENT_STEPS.map((s, i) => (
+   270→   270→   270→          <div
+   271→   271→   271→            key={s}
+   272→   272→   272→            className={`flex items-center gap-2 text-sm transition-all ${
+   273→   273→   273→              i < step ? "text-muted-foreground line-through opacity-60" :
+   274→   274→   274→              i === step ? "text-foreground" : "text-muted-foreground/50"
+   275→   275→   275→            }`}
+   276→   276→   276→          >
+   277→   277→   277→            {i < step ? (
+   278→   278→   278→              <span className="w-4 h-4 rounded-full bg-green-500/20 text-green-400 text-[10px] flex items-center justify-center">✓</span>
+   279→   279→   279→            ) : i === step ? (
+   280→   280→   280→              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+   281→   281→   281→            ) : (
+   282→   282→   282→              <span className="w-4 h-4 rounded-full border border-white/20" />
+   283→   283→   283→            )}
+   284→   284→   284→            {s}
+   285→   285→   285→          </div>
+   286→   286→   286→        ))}
+   287→   287→   287→      </div>
+   288→   288→   288→      <div className="relative w-full h-1 bg-white/10 rounded-full overflow-hidden">
+   289→   289→   289→        <div className="h-full bg-gradient-to-r from-primary to-accent animate-pulse" style={{ width: "60%" }} />
+   290→   290→   290→      </div>
+   291→   291→   291→    </div>
+   292→   292→   292→  );
+   293→   293→   293→}
+   294→   294→   294→
+   295→   295→   295→function updateAssembleProgress(prev: AssembleProgressState, message: string, event?: AssembleEvent): AssembleProgressState {
+   296→   296→   296→  if (!event) return { ...prev, message };
+   297→   297→   297→  if (event.type === "log") {
+   298→   298→   298→    return { ...prev, logs: [...prev.logs, event.message].slice(-20), message };
+   299→   299→   299→  }
+   300→   300→   300→  if (event.type === "engine") {
+   301→   301→   301→    return { ...prev, message, phase: "Carregando engine", currentIndex: null, scenePct: 0, downloadItem: "engine", downloadPct: 0 };
+   302→   302→   302→  }
+   303→   303→   303→  if (event.type === "engine-download") {
+   304→   304→   304→    // Show engine download as 0-5% of total progress
+   305→   305→   305→    return { ...prev, message, phase: "Carregando engine", currentIndex: null, scenePct: (event.pct / 100) * 5, downloadItem: `${event.mb}MB`, downloadPct: event.pct };
+   306→   306→   306→  }
+   307→   307→   307→  if (event.type === "scene-download") {
+   308→   308→   308→    return { ...prev, message, phase: "Baixando recursos", currentIndex: event.index, total: event.total, downloadItem: event.item, downloadPct: event.pct, scenePct: 0 };
+   309→   309→   309→  }
+   310→   310→   310→  if (event.type === "scene-start") {
+   311→   311→   311→    return { ...prev, message, phase: "Preparando cena", currentIndex: event.index, total: event.total, downloadItem: "", downloadPct: 0, scenePct: 10 };
+   312→   312→   312→  }
+   313→   313→   313→  if (event.type === "scene-render") {
+   314→   314→   314→    return { ...prev, message, phase: "Renderizando cena", currentIndex: event.index, total: event.total, downloadItem: "", downloadPct: 0, scenePct: 30, ffmpegPct: 0 };
+   315→   315→   315→  }
+   316→   316→   316→  if (event.type === "ffmpeg-progress") {
+   317→   317→   317→    const pct = Math.round((event.progress ?? 0) * 100);
+   318→   318→   318→    return { ...prev, message, phase: "Renderizando cena", currentIndex: event.index, total: prev.total, scenePct: 30 + pct * 0.7, ffmpegPct: pct };
+   319→   319→   319→  }
+   320→   320→   320→  if (event.type === "scene-done") {
+   321→   321→   321→    return { ...prev, message, phase: "Cena concluida", currentIndex: event.index, total: event.total, completed: Math.max(prev.completed, event.index + 1), downloadItem: "", downloadPct: 0, scenePct: 100 };
+   322→   322→   322→  }
+   323→   323→   323→  if (event.type === "concat") {
+   324→   324→   324→    return { ...prev, message, phase: "Unindo cenas", currentIndex: null, total: event.total, completed: event.total, scenePct: 0 };
+   325→   325→   325→  }
+   326→   326→   326→  if (event.type === "done") {
+   327→   327→   327→    return { ...prev, message, phase: "Video pronto", currentIndex: null, completed: prev.total, scenePct: 100 };
+   328→   328→   328→  }
+   329→   329→   329→  return { ...prev, message };
+   330→   330→   330→}
+   331→   331→   331→
+   332→   332→   332→/* --- Ken Burns Canvas Preview --- */
+   333→   333→   333→function KenBurnsCanvas({ imageUrl, styleIndex, playing }: { imageUrl: string; styleIndex: number; playing: boolean }) {
+   334→   334→   334→  const canvasRef = useRef<HTMLCanvasElement>(null);
+   335→   335→   335→  const imgRef = useRef<HTMLImageElement | null>(null);
+   336→   336→   336→  const animRef = useRef<number>(0);
+   337→   337→   337→  const startRef = useRef(0);
+   338→   338→   338→
+   339→   339→   339→  useEffect(() => {
+   340→   340→   340→    const img = new Image();
+   341→   341→   341→    img.crossOrigin = "anonymous";
+   342→   342→   342→    img.src = imageUrl;
+   343→   343→   343→    img.onload = () => { imgRef.current = img; };
+   344→   344→   344→    imgRef.current = null;
+   345→   345→   345→  }, [imageUrl]);
+   346→   346→   346→
+   347→   347→   347→  useEffect(() => {
+   348→   348→   348→    const canvas = canvasRef.current;
+   349→   349→   349→    if (!canvas) return;
+   350→   350→   350→    const ctx = canvas.getContext("2d")!;
+   351→   351→   351→    const W = canvas.width;
+   352→   352→   352→    const H = canvas.height;
+   353→   353→   353→    const DURATION = 6000;
+   354→   354→   354→
+   355→   355→   355→    function draw(ts: number) {
+   356→   356→   356→      if (!startRef.current) startRef.current = ts;
+   357→   357→   357→      const elapsed = ts - startRef.current;
+   358→   358→   358→      const t = Math.min(elapsed / DURATION, 1);
+   359→   359→   359→      const img = imgRef.current;
+   360→   360→   360→
+   361→   361→   361→      ctx.fillStyle = "#000";
+   362→   362→   362→      ctx.fillRect(0, 0, W, H);
+   363→   363→   363→
+   364→   364→   364→      if (img) {
+   365→   365→   365→        const zoom = 1.0 + t * 0.3;
+   366→   366→   366→        const iw = W * zoom;
+   367→   367→   367→        const ih = H * zoom;
+   368→   368→   368→        let ox: number, oy: number;
+   369→   369→   369→        switch (styleIndex % 5) {
+   370→   370→   370→          case 0: ox = (W - iw) / 2; oy = (H - ih) / 2; break;
+   371→   371→   371→          case 1: ox = (W - iw) / 2; oy = (H - ih) / 2; break;
+   372→   372→   372→          case 2: ox = -(iw - W) * t; oy = (H - ih) / 2; break;
+   373→   373→   373→          case 3: ox = -(iw - W) * (1 - t); oy = (H - ih) / 2; break;
+   374→   374→   374→          default: ox = (W - iw) / 2; oy = -(ih - H) * t; break;
+   375→   375→   375→        }
+   376→   376→   376→        ctx.drawImage(img, ox, oy, iw, ih);
+   377→   377→   377→        // vignette
+   378→   378→   378→        const grad = ctx.createRadialGradient(W / 2, H / 2, W * 0.25, W / 2, H / 2, W * 0.7);
+   379→   379→   379→        grad.addColorStop(0, "rgba(0,0,0,0)");
+   380→   380→   380→        grad.addColorStop(1, "rgba(0,0,0,0.6)");
+   381→   381→   381→        ctx.fillStyle = grad;
+   382→   382→   382→        ctx.fillRect(0, 0, W, H);
+   383→   383→   383→      }
+   384→   384→   384→
+   385→   385→   385→      // cinematic bars
+   386→   386→   386→      ctx.fillStyle = "rgba(0,0,0,0.5)";
+   387→   387→   387→      ctx.fillRect(0, 0, W, H * 0.07);
+   388→   388→   388→      ctx.fillRect(0, H * 0.93, W, H * 0.07);
+   389→   389→   389→
+   390→   390→   390→      // scanline
+   391→   391→   391→      const scanY = (elapsed * 0.05) % H;
+   392→   392→   392→      ctx.fillStyle = "rgba(139,92,246,0.08)";
+   393→   393→   393→      ctx.fillRect(0, scanY, W, 2);
+   394→   394→   394→
+   395→   395→   395→      if (playing && t < 1) {
+   396→   396→   396→        animRef.current = requestAnimationFrame(draw);
+   397→   397→   397→      } else if (playing && t >= 1) {
+   398→   398→   398→        startRef.current = 0;
+   399→   399→   399→        animRef.current = requestAnimationFrame(draw);
+   400→   400→   400→      }
+   401→   401→   401→    }
+   402→   402→   402→
+   403→   403→   403→    if (playing) {
+   404→   404→   404→      startRef.current = 0;
+   405→   405→   405→      animRef.current = requestAnimationFrame(draw);
+   406→   406→   406→    }
+   407→   407→   407→    return () => cancelAnimationFrame(animRef.current);
+   408→   408→   408→  }, [playing, styleIndex, imageUrl]);
+   409→   409→   409→
+   410→   410→   410→  return (
+   411→   411→   411→    <canvas
+   412→   412→   412→      ref={canvasRef}
+   413→   413→   413→      width={640}
+   414→   414→   414→      height={360}
+   415→   415→   415→      className="w-full h-full object-cover rounded-xl"
+   416→   416→   416→    />
+   417→   417→   417→  );
+   418→   418→   418→}
+   419→   419→   419→
+   420→   420→   420→/* --- Audio Waveform Visualizer --- */
+   421→   421→   421→function AudioWaveform({ playing, color = "#a78bfa" }: { playing: boolean; color?: string }) {
+   422→   422→   422→  const canvasRef = useRef<HTMLCanvasElement>(null);
+   423→   423→   423→  const animRef = useRef<number>(0);
+   424→   424→   424→
+   425→   425→   425→  useEffect(() => {
+   426→   426→   426→    const canvas = canvasRef.current;
+   427→   427→   427→    if (!canvas) return;
+   428→   428→   428→    const ctx = canvas.getContext("2d")!;
+   429→   429→   429→    const W = canvas.width;
+   430→   430→   430→    const H = canvas.height;
+   431→   431→   431→    const BARS = 48;
+   432→   432→   432→    const barW = W / BARS;
+   433→   433→   433→    let phase = 0;
+   434→   434→   434→
+   435→   435→   435→    function draw() {
+   436→   436→   436→      ctx.clearRect(0, 0, W, H);
+   437→   437→   437→      phase += 0.04;
+   438→   438→   438→
+   439→   439→   439→      for (let i = 0; i < BARS; i++) {
+   440→   440→   440→        const x = i * barW;
+   441→   441→   441→        let h: number;
+   442→   442→   442→        if (playing) {
+   443→   443→   443→          const wave = Math.sin(phase + i * 0.3) * 0.4 + Math.sin(phase * 1.5 + i * 0.15) * 0.3 + Math.cos(phase * 0.7 + i * 0.5) * 0.3;
+   444→   444→   444→          h = Math.abs(wave) * H * 0.85 + H * 0.08;
+   445→   445→   445→        } else {
+   446→   446→   446→          h = H * 0.1;
+   447→   447→   447→        }
+   448→   448→   448→        const grad = ctx.createLinearGradient(x, H - h, x, H);
+   449→   449→   449→        grad.addColorStop(0, color);
+   450→   450→   450→        grad.addColorStop(1, color + "33");
+   451→   451→   451→        ctx.fillStyle = grad;
+   452→   452→   452→        ctx.fillRect(x + 1, H - h, barW - 2, h);
+   453→   453→   453→      }
+   454→   454→   454→      animRef.current = requestAnimationFrame(draw);
+   455→   455→   455→    }
+   456→   456→   456→    animRef.current = requestAnimationFrame(draw);
+   457→   457→   457→    return () => cancelAnimationFrame(animRef.current);
+   458→   458→   458→  }, [playing, color]);
+   459→   459→   459→
+   460→   460→   460→  return (
+   461→   461→   461→    <canvas ref={canvasRef} width={384} height={48} className="w-full h-12 rounded-lg" />
+   462→   462→   462→  );
+   463→   463→   463→}
+   464→   464→   464→
+   465→   465→   465→/* --- Floating Particles --- */
+   466→   466→   466→function Particles({ count = 20 }: { count?: number }) {
+   467→   467→   467→  const canvasRef = useRef<HTMLCanvasElement>(null);
+   468→   468→   468→  const animRef = useRef<number>(0);
+   469→   469→   469→  const particlesRef = useRef<{ x: number; y: number; vx: number; vy: number; r: number; a: number }[]>([]);
+   470→   470→   470→
+   471→   471→   471→  useEffect(() => {
+   472→   472→   472→    const canvas = canvasRef.current;
+   473→   473→   473→    if (!canvas) return;
+   474→   474→   474→    const ctx = canvas.getContext("2d")!;
+   475→   475→   475→    const W = canvas.width;
+   476→   476→   476→    const H = canvas.height;
+   477→   477→   477→    particlesRef.current = Array.from({ length: count }, () => ({
+   478→   478→   478→      x: Math.random() * W, y: Math.random() * H,
+   479→   479→   479→      vx: (Math.random() - 0.5) * 0.5, vy: -Math.random() * 0.8 - 0.2,
+   480→   480→   480→      r: Math.random() * 2 + 0.5, a: Math.random() * 0.5 + 0.2,
+   481→   481→   481→    }));
+   482→   482→   482→
+   483→   483→   483→    function draw() {
+   484→   484→   484→      ctx.clearRect(0, 0, W, H);
+   485→   485→   485→      for (const p of particlesRef.current) {
+   486→   486→   486→        p.x += p.vx; p.y += p.vy;
+   487→   487→   487→        if (p.y < -5) { p.y = H + 5; p.x = Math.random() * W; }
+   488→   488→   488→        if (p.x < -5) p.x = W + 5;
+   489→   489→   489→        if (p.x > W + 5) p.x = -5;
+   490→   490→   490→        ctx.beginPath();
+   491→   491→   491→        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+   492→   492→   492→        ctx.fillStyle = `rgba(167,139,250,${p.a})`;
+   493→   493→   493→        ctx.fill();
+   494→   494→   494→      }
+   495→   495→   495→      animRef.current = requestAnimationFrame(draw);
+   496→   496→   496→    }
+   497→   497→   497→    animRef.current = requestAnimationFrame(draw);
+   498→   498→   498→    return () => cancelAnimationFrame(animRef.current);
+   499→   499→   499→  }, [count]);
+   500→   500→   500→
+
+[showing lines 1-500 of 1479; use offset=501 with limit to continue reading]
