@@ -16,6 +16,7 @@ import { Route as ApiTrendsRouteImport } from './routes/api/trends'
 import { Route as ApiScriptRouteImport } from './routes/api/script'
 import { Route as ApiPublishRouteImport } from './routes/api/publish'
 import { Route as ApiImageRouteImport } from './routes/api/image'
+import { Route as ApiEnvRouteImport } from './routes/api/env'
 import { Route as ApiBalanceRouteImport } from './routes/api/balance'
 import { Route as ApiAnimateRouteImport } from './routes/api/animate'
 
@@ -54,6 +55,11 @@ const ApiImageRoute = ApiImageRouteImport.update({
   path: '/api/image',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiEnvRoute = ApiEnvRouteImport.update({
+  id: '/api/env',
+  path: '/api/env',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBalanceRoute = ApiBalanceRouteImport.update({
   id: '/api/balance',
   path: '/api/balance',
@@ -70,6 +76,7 @@ export interface FileRoutesByFullPath {
   '/studio': typeof StudioRoute
   '/api/animate': typeof ApiAnimateRoute
   '/api/balance': typeof ApiBalanceRoute
+  '/api/env': typeof ApiEnvRoute
   '/api/image': typeof ApiImageRoute
   '/api/publish': typeof ApiPublishRoute
   '/api/script': typeof ApiScriptRoute
@@ -81,6 +88,7 @@ export interface FileRoutesByTo {
   '/studio': typeof StudioRoute
   '/api/animate': typeof ApiAnimateRoute
   '/api/balance': typeof ApiBalanceRoute
+  '/api/env': typeof ApiEnvRoute
   '/api/image': typeof ApiImageRoute
   '/api/publish': typeof ApiPublishRoute
   '/api/script': typeof ApiScriptRoute
@@ -93,6 +101,7 @@ export interface FileRoutesById {
   '/studio': typeof StudioRoute
   '/api/animate': typeof ApiAnimateRoute
   '/api/balance': typeof ApiBalanceRoute
+  '/api/env': typeof ApiEnvRoute
   '/api/image': typeof ApiImageRoute
   '/api/publish': typeof ApiPublishRoute
   '/api/script': typeof ApiScriptRoute
@@ -106,6 +115,7 @@ export interface FileRouteTypes {
     | '/studio'
     | '/api/animate'
     | '/api/balance'
+    | '/api/env'
     | '/api/image'
     | '/api/publish'
     | '/api/script'
@@ -117,6 +127,7 @@ export interface FileRouteTypes {
     | '/studio'
     | '/api/animate'
     | '/api/balance'
+    | '/api/env'
     | '/api/image'
     | '/api/publish'
     | '/api/script'
@@ -128,6 +139,7 @@ export interface FileRouteTypes {
     | '/studio'
     | '/api/animate'
     | '/api/balance'
+    | '/api/env'
     | '/api/image'
     | '/api/publish'
     | '/api/script'
@@ -140,6 +152,7 @@ export interface RootRouteChildren {
   StudioRoute: typeof StudioRoute
   ApiAnimateRoute: typeof ApiAnimateRoute
   ApiBalanceRoute: typeof ApiBalanceRoute
+  ApiEnvRoute: typeof ApiEnvRoute
   ApiImageRoute: typeof ApiImageRoute
   ApiPublishRoute: typeof ApiPublishRoute
   ApiScriptRoute: typeof ApiScriptRoute
@@ -198,6 +211,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiImageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/env': {
+      id: '/api/env'
+      path: '/api/env'
+      fullPath: '/api/env'
+      preLoaderRoute: typeof ApiEnvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/balance': {
       id: '/api/balance'
       path: '/api/balance'
@@ -220,6 +240,7 @@ const rootRouteChildren: RootRouteChildren = {
   StudioRoute: StudioRoute,
   ApiAnimateRoute: ApiAnimateRoute,
   ApiBalanceRoute: ApiBalanceRoute,
+  ApiEnvRoute: ApiEnvRoute,
   ApiImageRoute: ApiImageRoute,
   ApiPublishRoute: ApiPublishRoute,
   ApiScriptRoute: ApiScriptRoute,
