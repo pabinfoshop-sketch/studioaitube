@@ -40,8 +40,8 @@ export const Route = createFileRoute("/api/balance")({
               const statusLabel = isFree
                 ? "grátis / uso ilimitado"
                 : hasCreditLimit
-                  ? `$${balanceUsd!.toFixed(2)} restante`
-                  : `pago por uso — $${usageUsd.toFixed(4)} este mês`;
+                  ? `saldo $${balanceUsd!.toFixed(2)}`
+                  : `usado $${usageUsd < 0.01 ? usageUsd.toFixed(4) : usageUsd.toFixed(2)} este mês`;
               result.openrouter = { ok: true, balanceUsd, usageUsd, limitUsd, isFreeTier: isFree, statusLabel };
             } else {
               const body = await r.text().catch(() => "");

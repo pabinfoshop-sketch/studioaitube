@@ -130,8 +130,8 @@ function parseOpenRouterData(data: any) {
   const statusLabel = isFree
     ? "grátis / uso ilimitado"
     : hasLimit
-      ? `$${balanceUsd!.toFixed(2)} restante`
-      : `pago por uso — $${usageUsd.toFixed(4)} este mês`;
+      ? `saldo $${balanceUsd!.toFixed(2)}`
+      : `usado $${usageUsd < 0.01 ? usageUsd.toFixed(4) : usageUsd.toFixed(2)} este mês`;
   return { ok: true as const, balanceUsd, usageUsd, limitUsd, isFreeTier: isFree, statusLabel };
 }
 
