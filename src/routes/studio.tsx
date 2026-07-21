@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { streamImage } from "@/lib/streamImage";
 import { assembleVideo, type AssembleEvent } from "@/lib/assembleVideo";
+import { clientBalance, clientScript, clientImage, clientTts, clientAnimate } from "@/lib/ai-client";
 import { Sparkles, Wand2, Film, Mic2, Image as ImageIcon, Loader2, TrendingUp } from "lucide-react";
 import { ChannelPlanner, type HistoryItem } from "@/components/ChannelPlanner";
 
@@ -115,8 +115,7 @@ function BalanceWidget() {
   async function refresh() {
     setLoading(true);
     try {
-      const r = await fetch("/api/balance", { cache: "no-store" });
-      setData(await r.json());
+      setData(await clientBalance());
     } catch { /* noop */ }
     finally { setLoading(false); }
   }
@@ -333,15 +332,7 @@ function Studio() {
     if (!topic.trim()) return;
     setLoading(true); setScript(null); setImages({}); setAudios({});
     try {
-      const response = await fetch("/api/script", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, sceneCount: count, language: "pt-BR" }),
-      });
-
-      if (!response.ok) throw new Error(await response.text());
-
-      const s = await response.json();
+      const s = await clientScript(topic, count, "pt-BR");
       setScript(s as Script);
       saveHistory([...history, {
         id: crypto.randomUUID(), title: s.title, topic, createdAt: Date.now(), scenes: (s.scenes ?? []).length,
@@ -355,9 +346,9 @@ function Studio() {
   async function genImage(i: number, prompt: string) {
     setBusy((b) => ({ ...b, [`img${i}`]: true }));
     try {
-      await streamImage("/api/image", prompt, (url, final, modelUsed) => {
-        setImages((im) => ({ ...im, [i]: { url, final, modelUsed: modelUsed ?? im[i]?.modelUsed } }));
-      });
+      const result = await clientImage(prompt);
+      const url = `data:${result.mime};base64,${result.b64}`;
+      setImages((im) => ({ ...im, [i]: { url, final: true, modelUsed: result.modelUsed } }));
     } catch (err: any) {
       toast.error(`Cena ${i + 1}: ${err.message}`);
     } finally { setBusy((b) => ({ ...b, [`img${i}`]: false })); }
@@ -371,12 +362,7 @@ function Studio() {
     }
     setBusy((b) => ({ ...b, [`aud${i}`]: true }));
     try {
-      const r = await fetch("/api/tts", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: cleanText, voice }),
-      });
-      if (!r.ok) throw new Error(await r.text());
-      const blob = await r.blob();
+      const blob = await clientTts(cleanText, voice);
       setAudios((a) => ({ ...a, [i]: URL.createObjectURL(blob) }));
     } catch (err: any) {
       toast.error(`Áudio cena ${i + 1}: ${err.message}`);
@@ -391,13 +377,7 @@ function Studio() {
     }
     setBusy((b) => ({ ...b, [`vid${i}`]: true }));
     try {
-      const r = await fetch("/api/animate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageDataUrl: img.url, prompt }),
-      });
-      if (!r.ok) throw new Error(await r.text());
-      const j = (await r.json()) as { videoUrl: string; modelUsed?: string };
+      const j = await clientAnimate(img.url, prompt, (msg) => toast.info(`Cena ${i + 1}: ${msg}`));
       setVideos((v) => ({ ...v, [i]: { url: j.videoUrl, modelUsed: j.modelUsed } }));
       toast.success(`Cena ${i + 1} animada!`);
     } catch (err: any) {
@@ -463,7 +443,8 @@ function Studio() {
 
       const prompt = (script.thumbnailPrompt || `dark dramatic YouTube thumbnail about ${script.title}, cinematic, high contrast, no text, 16:9`) + `, ${mood}`;
       let baseUrl = "";
-      await streamImage("/api/image", prompt, (url, final) => { if (final) baseUrl = url; });
+      const thumbResult = await clientImage(prompt);
+      baseUrl = `data:${thumbResult.mime};base64,${thumbResult.b64}`;
       if (!baseUrl) throw new Error("Sem imagem base");
 
       const img = new Image();

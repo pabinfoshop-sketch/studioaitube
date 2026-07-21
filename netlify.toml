@@ -5,3 +5,8 @@
 [functions]
   node_bundler = "esbuild"
   included_files = [".netlify/functions-internal/**"]
+
+# ── Variáveis de ambiente OBRIGATÓRIAS (prefixo VITE_ = injetadas no browser) ──
+# VITE_OPENROUTER_API_KEY=sk-or-v1-...
+# VITE_REPLICATE_API_KEY=r8_...
+# VITE_ELEVENLABS_API_KEY=... (opcional, sem isso usa Google TTS grátis)

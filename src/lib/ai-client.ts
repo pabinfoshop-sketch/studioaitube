@@ -1,0 +1,237 @@
+// ── Client-side AI calls ──────────────────────────────────────────
+// Bypasses Netlify Functions timeout by calling AI providers directly
+// from the browser. Keys come from VITE_* env vars injected at build.
+
+const OPENROUTER_KEY = (import.meta as any).env?.VITE_OPENROUTER_API_KEY || "";
+const REPLICATE_KEY = (import.meta as any).env?.VITE_REPLICATE_API_KEY || "";
+const ELEVENLABS_KEY = (import.meta as any).env?.VITE_ELEVENLABS_API_KEY || "";
+
+// ── Helpers ──
+
+const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OR_HEADERS: Record<string, string> = OPENROUTER_KEY
+  ? { Authorization: `Bearer ${OPENROUTER_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://studioaitube.netlify.app", "X-Title": "AIDarkCesar" }
+  : {};
+
+const REPLICATE_URL = "https://api.replicate.com/v1";
+const RP_HEADERS: Record<string, string> = REPLICATE_KEY
+  ? { Authorization: `Bearer ${REPLICATE_KEY}` }
+  : {};
+
+function hasKeys() {
+  return { openrouter: !!OPENROUTER_KEY, replicate: !!REPLICATE_KEY, elevenlabs: !!ELEVENLABS_KEY };
+}
+
+// ── Balance (lightweight check) ──
+
+export async function clientBalance(): Promise<Record<string, any>> {
+  const k = hasKeys();
+  const result: Record<string, any> = {
+    free: { provider: "free", ok: true, statusLabel: "fallback grátis ativo", raw: { tts: "google-free" } },
+    lovable: { provider: "lovable", ok: false, error: "sem LOVABLE_API_KEY" },
+    openrouter: { provider: "openrouter", ok: false, error: "sem VITE_OPENROUTER_API_KEY" },
+    replicate: { provider: "replicate", ok: false, error: "sem VITE_REPLICATE_API_KEY" },
+    order: ["free", "openrouter-free", "openrouter-cheap", "lovable-backup", "replicate-video"],
+  };
+  if (k.openrouter) {
+    try {
+      const r = await fetch("https://openrouter.ai/api/v1/auth/key", { headers: { Authorization: `Bearer ${OPENROUTER_KEY}` } });
+      if (r.ok) {
+        const d = await r.json();
+        result.openrouter = { provider: "openrouter", ok: true, balanceUsd: d.data?.limit_remaining, usageUsd: d.data?.limit?.length ? d.data?.limit[0]?.usage : 0, limitUsd: d.data?.limit?.length ? d.data?.limit[0]?.limit : null, keySource: "VITE_OPENROUTER_API_KEY" };
+      }
+    } catch { /* noop */ }
+  }
+  if (k.replicate) {
+    try {
+      const r = await fetch(`${REPLICATE_URL}/users/current`, { headers: RP_HEADERS });
+      if (r.ok) {
+        const d = await r.json();
+        result.replicate = { provider: "replicate", ok: true, keySource: "VITE_REPLICATE_API_KEY", statusLabel: "conectado", raw: { username: d.username, name: d.name, type: d.type } };
+      }
+    } catch { /* noop */ }
+  }
+  return result;
+}
+
+// ── Script Generation ──
+
+const SCRIPT_MODELS = [
+  "deepseek/deepseek-chat-v3.1:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "google/gemini-2.0-flash-exp:free",
+  "deepseek/deepseek-chat-v3.1",
+  "google/gemini-2.5-flash-lite",
+  "openai/gpt-4o-mini",
+  "google/gemini-2.5-flash",
+];
+
+export async function clientScript(topic: string, sceneCount: number, language = "pt-BR") {
+  const prompt = `Você é roteirista e especialista em SEO de canais dark do YouTube (mistério, terror, sobrenatural, true crime).
+Crie um roteiro em ${language} sobre: "${topic}".
+Divida em exatamente ${sceneCount} cenas. Cada narração tem 3 a 5 frases densas, atmosfera sombria, ritmo cinematográfico e ganchos.
+Para cada cena escreva também um imagePrompt em INGLÊS descrevendo uma imagem cinematográfica dark, atmosférica, 16:9, sem texto na imagem.
+
+Também gere metadados otimizados para RANKEAR no YouTube:
+- seoTitle: máx 70 caracteres, com curiosity gap + emoji + palavra-chave forte
+- seoDescription: 3 parágrafos — 1º com hook + palavra-chave; 2º expandindo o mistério; 3º com CTA "Inscreva-se" + 5 hashtags
+- tags: array de 15-20 tags misturando palavra-chave principal, long-tail em português e termos do nicho
+- thumbnailPrompt em INGLÊS: cena impactante, expressão facial marcante, cores contrastantes, sem texto, YouTube thumbnail style
+- thumbnailText: 3-6 palavras EM CAIXA ALTA para sobrepor na thumb
+
+Responda APENAS com JSON válido, sem markdown, no formato:
+{"title":"","hook":"","seoTitle":"","seoDescription":"","tags":[],"thumbnailPrompt":"","thumbnailText":"","scenes":[{"title":"","narration":"","imagePrompt":""}]}`;
+
+  for (const model of SCRIPT_MODELS) {
+    try {
+      const r = await fetch(OR_URL, {
+        method: "POST", headers: OR_HEADERS,
+        body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], response_format: { type: "json_object" } }),
+      });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const text: string = j?.choices?.[0]?.message?.content ?? "";
+      if (!text) continue;
+      const cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (!match) continue;
+      return { ...JSON.parse(match[0]), modelUsed: `openrouter/${model}` };
+    } catch { continue; }
+  }
+  throw new Error("Todos os modelos falharam. Verifique VITE_OPENROUTER_API_KEY.");
+}
+
+// ── Image Generation ──
+
+const IMAGE_MODELS = [
+  "google/gemini-2.5-flash-image",
+  "google/gemini-3-pro-image",
+];
+
+export async function clientImage(prompt: string): Promise<{ b64: string; mime: string; modelUsed: string }> {
+  const fullPrompt = `Cinematic dark atmospheric 16:9 image, no text: ${prompt}`;
+  for (const model of IMAGE_MODELS) {
+    try {
+      const r = await fetch(OR_URL, {
+        method: "POST", headers: OR_HEADERS,
+        body: JSON.stringify({ model, messages: [{ role: "user", content: fullPrompt }], modalities: ["image", "text"] }),
+      });
+      if (!r.ok) continue;
+      const j: any = await r.json();
+      const imgs = j?.choices?.[0]?.message?.images;
+      const url: string | undefined = imgs?.[0]?.image_url?.url;
+      if (url?.startsWith("data:image")) {
+        const b64 = url.split(",")[1];
+        return { b64, mime: "image/png", modelUsed: `openrouter/${model}` };
+      }
+    } catch { continue; }
+  }
+  throw new Error("Falha ao gerar imagem. Verifique VITE_OPENROUTER_API_KEY.");
+}
+
+// ── TTS (Google Translate free fallback — runs entirely client-side) ──
+
+function splitForGoogleTts(text: string, max = 190): string[] {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return [clean];
+  const sentences = clean.match(/[^.!?]+[.!?]*\s*/g) ?? [clean];
+  const out: string[] = [];
+  let cur = "";
+  const flush = () => { if (cur.trim()) out.push(cur.trim()); cur = ""; };
+  for (const s of sentences) {
+    if (s.length > max) { flush(); const words = s.split(" "); for (const w of words) { if ((cur + " " + w).trim().length > max) flush(); cur = (cur ? cur + " " : "") + w; } continue; }
+    if ((cur + s).length > max) flush();
+    cur += s;
+  }
+  flush();
+  return out;
+}
+
+export async function clientTts(text: string, _voice?: string): Promise<Blob> {
+  // 1) ElevenLabs
+  if (ELEVENLABS_KEY) {
+    const VOICE_MAP: Record<string, string> = { onyx: "JBFqnCBsd6RMkjVDRZzb", alloy: "EXAVITQu4vr4xnSDxMaL", echo: "TX3LPaxmHKxFdv7VOQHJ" };
+    const voiceId = VOICE_MAP[_voice || "onyx"] || VOICE_MAP.onyx;
+    try {
+      const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
+        method: "POST",
+        headers: { "xi-api-key": ELEVENLABS_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ text, model_id: "eleven_multilingual_v2", voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true } }),
+      });
+      if (r.ok) return await r.blob();
+    } catch { /* fallback to google */ }
+  }
+
+  // 2) Google Translate TTS (free, client-side)
+  const chunks = splitForGoogleTts(text);
+  const parts: ArrayBuffer[] = [];
+  for (const chunk of chunks) {
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=pt-BR&client=tw-ob&q=${encodeURIComponent(chunk)}`;
+    const r = await fetch(url);
+    if (r.ok) parts.push(await r.arrayBuffer());
+  }
+  if (!parts.length) throw new Error("Falha ao gerar áudio");
+  const total = parts.reduce((n, p) => n + p.byteLength, 0);
+  const merged = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) { merged.set(new Uint8Array(p), off); off += p.byteLength; }
+  return new Blob([merged], { type: "audio/mpeg" });
+}
+
+// ── Animate (Replicate image→video, client-side polling) ──
+
+const REPLICATE_MODEL = "wan-video/wan-2.2-i2v-fast";
+
+function dataUrlToBlob(dataUrl: string): { blob: Blob; name: string } {
+  const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!m) throw new Error("imageDataUrl inválido");
+  const bin = atob(m[2]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const mime = m[1];
+  const ext = mime.includes("png") ? "png" : "jpg";
+  return { blob: new Blob([bytes], { type: mime }), name: `frame.${ext}` };
+}
+
+export async function clientAnimate(imageDataUrl: string, prompt: string, onProgress?: (msg: string) => void): Promise<{ videoUrl: string; modelUsed: string }> {
+  if (!REPLICATE_KEY) throw new Error("Configure VITE_REPLICATE_API_KEY para animações.");
+
+  // 1) Upload image
+  onProgress?.("Enviando imagem para Replicate...");
+  const { blob } = dataUrlToBlob(imageDataUrl);
+  const form = new FormData();
+  form.append("content", blob, "frame.png");
+  const upRes = await fetch(`${REPLICATE_URL}/files`, { method: "POST", headers: RP_HEADERS, body: form });
+  if (!upRes.ok) throw new Error(`Upload Replicate: ${upRes.status}`);
+  const upJson: any = await upRes.json();
+  const imageUrl: string = upJson?.urls?.get;
+  if (!imageUrl) throw new Error("Upload sem URL.");
+
+  // 2) Create prediction
+  onProgress?.("Criando predição de vídeo...");
+  const createRes = await fetch(`${REPLICATE_URL}/models/${REPLICATE_MODEL}/predictions`, {
+    method: "POST",
+    headers: { ...RP_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ input: { image: imageUrl, prompt: prompt || "cinematic subtle motion, camera drift, atmospheric" } }),
+  });
+  if (createRes.status === 402) throw new Error("Conta Replicate sem créditos. Ative billing em replicate.com/account/billing.");
+  if (!createRes.ok) throw new Error(`Replicate ${createRes.status}`);
+  const pred: any = await createRes.json();
+  const id = pred?.id;
+  if (!id) throw new Error("Sem id de predição.");
+
+  // 3) Poll
+  for (let i = 0; i < 80; i++) {
+    await new Promise((r) => setTimeout(r, i < 5 ? 3000 : 5000));
+    onProgress?.(`Gerando vídeo... (${i + 1}/${Math.min(40, 80)})`);
+    const r = await fetch(`${REPLICATE_URL}/predictions/${id}`, { headers: RP_HEADERS });
+    const j: any = await r.json();
+    if (j.status === "succeeded") {
+      const out = Array.isArray(j.output) ? j.output[0] : j.output;
+      if (!out) throw new Error("Sem output de vídeo.");
+      return { videoUrl: out, modelUsed: `replicate/${REPLICATE_MODEL}` };
+    }
+    if (j.status === "failed" || j.status === "canceled") throw new Error(`Predição ${j.status}: ${j?.error ?? "sem detalhe"}`);
+  }
+  throw new Error("Timeout aguardando vídeo.");
+}
