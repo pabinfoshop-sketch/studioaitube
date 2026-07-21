@@ -298,31 +298,31 @@ export async function clientImage(prompt: string): Promise<{ b64: string; mime: 
   throw new Error(`Falha ao gerar imagem: ${errors.join(" | ")}`);
 }
 
-// ── TTS (Google Translate free fallback — runs entirely client-side) ──
+// ── TTS (usa /api/tts server-side como proxy — sem CORS) ──
 
-function splitForGoogleTts(text: string, max = 190): string[] {
-  const clean = text.replace(/\s+/g, " ").trim();
-  if (clean.length <= max) return [clean];
-  const sentences = clean.match(/[^.!?]+[.!?]*\s*/g) ?? [clean];
-  const out: string[] = [];
-  let cur = "";
-  const flush = () => { if (cur.trim()) out.push(cur.trim()); cur = ""; };
-  for (const s of sentences) {
-    if (s.length > max) { flush(); const words = s.split(" "); for (const w of words) { if ((cur + " " + w).trim().length > max) flush(); cur = (cur ? cur + " " : "") + w; } continue; }
-    if ((cur + s).length > max) flush();
-    cur += s;
+export async function clientTts(text: string, voice?: string): Promise<Blob> {
+  // Tenta server-side primeiro (Google TTS sem CORS + ElevenLabs fallback)
+  try {
+    const r = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (r.ok) {
+      const provider = r.headers.get("X-TTS-Provider");
+      if (provider) console.log(`[TTS] gerado via ${provider}`);
+      return await r.blob();
+    }
+    console.warn(`[TTS] server retornou ${r.status}:`, await r.text().catch(() => ""));
+  } catch (e: any) {
+    console.warn("[TTS] server indisponível:", e?.message);
   }
-  flush();
-  return out;
-}
 
-export async function clientTts(text: string, _voice?: string): Promise<Blob> {
-  await ensureKeys();
-
-  // 1) ElevenLabs
+  // Fallback direto: ElevenLabs (aceita CORS)
   if (_elevenLabsKey) {
     const VOICE_MAP: Record<string, string> = { onyx: "JBFqnCBsd6RMkjVDRZzb", alloy: "EXAVITQu4vr4xnSDxMaL", echo: "TX3LPaxmHKxFdv7VOQHJ" };
-    const voiceId = VOICE_MAP[_voice || "onyx"] || VOICE_MAP.onyx;
+    const voiceId = VOICE_MAP[voice || "onyx"] || VOICE_MAP.onyx;
     try {
       const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
         method: "POST",
@@ -330,23 +330,10 @@ export async function clientTts(text: string, _voice?: string): Promise<Blob> {
         body: JSON.stringify({ text, model_id: "eleven_multilingual_v2", voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true } }),
       });
       if (r.ok) return await r.blob();
-    } catch { /* fallback to google */ }
+    } catch { /* ignore */ }
   }
 
-  // 2) Google Translate TTS (free, client-side)
-  const chunks = splitForGoogleTts(text);
-  const parts: ArrayBuffer[] = [];
-  for (const chunk of chunks) {
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=pt-BR&client=tw-ob&q=${encodeURIComponent(chunk)}`;
-    const r = await fetch(url);
-    if (r.ok) parts.push(await r.arrayBuffer());
-  }
-  if (!parts.length) throw new Error("Falha ao gerar áudio");
-  const total = parts.reduce((n, p) => n + p.byteLength, 0);
-  const merged = new Uint8Array(total);
-  let off = 0;
-  for (const p of parts) { merged.set(new Uint8Array(p), off); off += p.byteLength; }
-  return new Blob([merged], { type: "audio/mpeg" });
+  throw new Error("Falha ao gerar áudio. Servidor TTS indisponível.");
 }
 
 // ── Animate (Replicate image→video, client-side polling) ──
