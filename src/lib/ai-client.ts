@@ -1,16 +1,62 @@
 // ── Client-side AI calls ──────────────────────────────────────────
-// Bypasses Netlify Functions timeout by calling AI providers directly
-// from the browser. Keys come from:
+// Bypasses server function timeouts by calling AI providers directly
+// from the browser. Keys come from (in priority order):
 //   1) VITE_* env vars injected at build (vite.config.ts define mapping)
-//   2) /api/env endpoint as runtime fallback
+//   2) /_env.json static file (generated at build time by vite.config.ts)
+//   3) /api/env endpoint as runtime fallback
+//   4) localStorage (user-configured via Settings modal)
 
 // ── Lazy key loading ───────────────────────────────────────────────
 
+const LS_KEYS = "aidc.api_keys";
 let _keysLoaded = false;
 let _keysLoading: Promise<void> | null = null;
 let _openRouterKey = (import.meta as any).env?.VITE_OPENROUTER_API_KEY || "";
 let _replicateKey = (import.meta as any).env?.VITE_REPLICATE_API_KEY || "";
 let _elevenLabsKey = (import.meta as any).env?.VITE_ELEVENLABS_API_KEY || "";
+
+function loadFromLocalStorage(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(LS_KEYS);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return {};
+}
+
+/** Save keys to localStorage for persistence across sessions */
+export function saveKeysToLocalStorage(keys: { openrouter?: string; replicate?: string; elevenlabs?: string }) {
+  const existing = loadFromLocalStorage();
+  if (keys.openrouter !== undefined) existing.OPENROUTER_API_KEY = keys.openrouter;
+  if (keys.replicate !== undefined) existing.REPLICATE_API_KEY = keys.replicate;
+  if (keys.elevenlabs !== undefined) existing.ELEVENLABS_API_KEY = keys.elevenlabs;
+  localStorage.setItem(LS_KEYS, JSON.stringify(existing));
+  // Update in-memory keys immediately
+  if (keys.openrouter !== undefined) _openRouterKey = keys.openrouter;
+  if (keys.replicate !== undefined) _replicateKey = keys.replicate;
+  if (keys.elevenlabs !== undefined) _elevenLabsKey = keys.elevenlabs;
+  _keysLoaded = true; // Force reload next time
+}
+
+/** Get current in-memory keys (for Settings UI) */
+export function getCurrentKeys() {
+  return { openrouter: _openRouterKey, replicate: _replicateKey, elevenlabs: _elevenLabsKey };
+}
+
+async function loadFromEnvJson(): Promise<Record<string, string>> {
+  try {
+    const r = await fetch("/_env.json", { cache: "no-store", signal: AbortSignal.timeout(5000) });
+    if (r.ok) return await r.json();
+  } catch { /* ignore */ }
+  return {};
+}
+
+async function loadFromApiEnv(): Promise<Record<string, string>> {
+  try {
+    const r = await fetch("/api/env", { signal: AbortSignal.timeout(5000) });
+    if (r.ok) return await r.json();
+  } catch { /* ignore */ }
+  return {};
+}
 
 async function ensureKeys(): Promise<void> {
   if (_keysLoaded) return;
@@ -23,17 +69,28 @@ async function ensureKeys(): Promise<void> {
   }
 
   _keysLoading = (async () => {
-    try {
-      const r = await fetch("/api/env", { signal: AbortSignal.timeout(5000) });
-      if (r.ok) {
-        const d = await r.json();
-        if (!_openRouterKey) _openRouterKey = d.OPENROUTER_API_KEY || "";
-        if (!_replicateKey) _replicateKey = d.REPLICATE_API_KEY || "";
-        if (!_elevenLabsKey) _elevenLabsKey = d.ELEVENLABS_API_KEY || "";
-      }
-    } catch {
-      // Falha silenciosa — usa o que tem do build
+    // 1) Tenta localStorage (user-configured keys — highest runtime priority)
+    const lsKeys = loadFromLocalStorage();
+    if (!_openRouterKey) _openRouterKey = lsKeys.OPENROUTER_API_KEY || "";
+    if (!_replicateKey) _replicateKey = lsKeys.REPLICATE_API_KEY || "";
+    if (!_elevenLabsKey) _elevenLabsKey = lsKeys.ELEVENLABS_API_KEY || "";
+
+    // 2) Tenta _env.json (arquivo estático gerado no build — funciona em qualquer plataforma)
+    if (!_openRouterKey || !_replicateKey) {
+      const envJson = await loadFromEnvJson();
+      if (!_openRouterKey) _openRouterKey = envJson.OPENROUTER_API_KEY || "";
+      if (!_replicateKey) _replicateKey = envJson.REPLICATE_API_KEY || "";
+      if (!_elevenLabsKey) _elevenLabsKey = envJson.ELEVENLABS_API_KEY || "";
     }
+
+    // 3) Se ainda faltam chaves, tenta /api/env (server-side fallback)
+    if (!_openRouterKey || !_replicateKey) {
+      const apiEnv = await loadFromApiEnv();
+      if (!_openRouterKey) _openRouterKey = apiEnv.OPENROUTER_API_KEY || "";
+      if (!_replicateKey) _replicateKey = apiEnv.REPLICATE_API_KEY || "";
+      if (!_elevenLabsKey) _elevenLabsKey = apiEnv.ELEVENLABS_API_KEY || "";
+    }
+
     _keysLoaded = true;
     _keysLoading = null;
   })();
@@ -50,7 +107,7 @@ const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 function orHeaders(): Record<string, string> {
   return _openRouterKey
-    ? { Authorization: `Bearer ${_openRouterKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://studioaitube.netlify.app", "X-Title": "AIDarkCesar" }
+    ? { Authorization: `Bearer ${_openRouterKey}`, "Content-Type": "application/json", "HTTP-Referer": typeof window !== "undefined" ? window.location.origin : "https://studioaitube.pages.dev", "X-Title": "AIDarkCesar" }
     : {};
 }
 
@@ -62,42 +119,66 @@ function rpHeaders(): Record<string, string> {
     : {};
 }
 
-// ── Balance (server-side proxy to avoid CORS with Replicate) ──
+// ── Balance (server-side first, browser fallback) ──
+
+function parseOpenRouterData(data: any) {
+  const isFree = !!data.is_free_tier;
+  const hasLimit = data.limit != null;
+  const balanceUsd = hasLimit ? Number(data.limit_remaining) : null;
+  const usageUsd = Number(data.usage ?? 0);
+  const limitUsd = hasLimit ? Number(data.limit) : null;
+  const statusLabel = isFree
+    ? "grátis / uso ilimitado"
+    : hasLimit
+      ? `$${balanceUsd!.toFixed(2)} restante`
+      : `pago por uso — $${usageUsd.toFixed(4)} este mês`;
+  return { ok: true as const, balanceUsd, usageUsd, limitUsd, isFreeTier: isFree, statusLabel };
+}
 
 export async function clientBalance(): Promise<Record<string, any>> {
-  try {
-    const r = await fetch("/api/balance", { signal: AbortSignal.timeout(8000) });
-    if (r.ok) {
-      const server = await r.json();
-      return {
-        free: { provider: "free", ok: true, statusLabel: "fallback grátis ativo", raw: { tts: "google-free" } },
-        openrouter: { provider: "openrouter", ...server.openrouter },
-        replicate: { provider: "replicate", ...server.replicate },
-        order: ["free", "openrouter-free", "openrouter-cheap", "lovable-backup", "replicate-video"],
-      };
-    }
-  } catch { /* fallback below */ }
-
-  // Fallback: checks OpenRouter directly (has CORS), skips Replicate
   await ensureKeys();
   const k = hasKeys();
   const result: Record<string, any> = {
-    free: { provider: "free", ok: true, statusLabel: "fallback grátis ativo", raw: { tts: "google-free" } },
-    openrouter: { provider: "openrouter", ok: false, error: k.openrouter ? "servidor indisponível" : "sem chave configurada" },
-    replicate: { provider: "replicate", ok: false, error: k.replicate ? "servidor indisponível (CORS)" : "sem chave configurada" },
-    order: ["free", "openrouter-free", "openrouter-cheap", "lovable-backup", "replicate-video"],
+    free: { provider: "free", ok: true, statusLabel: "TTS grátis ativo", raw: { tts: "google-free" } },
+    openrouter: { provider: "openrouter", ok: false, error: k.openrouter ? "verificando..." : "sem chave" },
+    replicate: { provider: "replicate", ok: false, error: k.replicate ? "verificando..." : "sem chave" },
+    order: ["free", "openrouter-free", "openrouter-cheap", "replicate-video"],
   };
-  if (k.openrouter) {
+
+  // 1) PRIMEIRO: tenta /api/balance (server-side, sem CORS para nenhum provider)
+  try {
+    const r = await fetch("/api/balance", { signal: AbortSignal.timeout(10000) });
+    if (r.ok) {
+      const server: any = await r.json();
+      if (server.openrouter?.ok) result.openrouter = { provider: "openrouter", ...server.openrouter };
+      if (server.replicate?.ok) result.replicate = { provider: "replicate", ...server.replicate };
+    }
+  } catch { /* server endpoint indisponível — tenta direto */ }
+
+  // 2) FALLBACK: chamada direta do browser (OpenRouter aceita CORS)
+  if (!result.openrouter.ok && k.openrouter) {
     try {
-      const r = await fetch("https://openrouter.ai/api/v1/auth/key", { headers: orHeaders() });
+      const r = await fetch("https://openrouter.ai/api/v1/auth/key", {
+        headers: orHeaders(),
+        signal: AbortSignal.timeout(8000),
+      });
       if (r.ok) {
         const d: any = await r.json();
-        const data = d.data ?? {};
-        const hasCreditLimit = data.limit != null;
-        result.openrouter = { ok: true, balanceUsd: hasCreditLimit ? data.limit_remaining : undefined, usageUsd: data.usage ?? 0, statusLabel: hasCreditLimit ? `$${(data.limit_remaining ?? 0).toFixed(2)}` : `$${(data.usage ?? 0).toFixed(4)}`, isFreeTier: !!data.is_free_tier };
+        result.openrouter = { provider: "openrouter", ...parseOpenRouterData(d.data ?? {}) };
+      } else {
+        result.openrouter = { ok: false, error: `HTTP ${r.status}` };
       }
-    } catch { /* keep error */ }
+    } catch (e: any) {
+      result.openrouter = { ok: false, error: e?.message || "falha de rede" };
+    }
   }
+
+  // Replicate NUNCA funciona via browser (CORS bloqueado) —
+  // se /api/balance falhou, marca como indisponível
+  if (!result.replicate.ok && k.replicate) {
+    result.replicate = { ok: false, error: "proxy indisponível" };
+  }
+
   return result;
 }
 
@@ -115,7 +196,7 @@ const SCRIPT_MODELS = [
 
 export async function clientScript(topic: string, sceneCount: number, language = "pt-BR") {
   await ensureKeys();
-  if (!_openRouterKey) throw new Error("Chave OpenRouter não configurada. Adicione OPENROUTER_API_KEY nas variáveis de ambiente do Netlify.");
+  if (!_openRouterKey) throw new Error("Chave OpenRouter não configurada. Adicione OPENROUTER_API_KEY nas variáveis de ambiente.");
 
   const prompt = `Você é roteirista e especialista em SEO de canais dark do YouTube (mistério, terror, sobrenatural, true crime).
 Crie um roteiro em ${language} sobre: "${topic}".
@@ -168,7 +249,7 @@ const IMAGE_MODELS = [
 
 export async function clientImage(prompt: string): Promise<{ b64: string; mime: string; modelUsed: string }> {
   await ensureKeys();
-  if (!_openRouterKey) throw new Error("Chave OpenRouter não configurada. Adicione OPENROUTER_API_KEY nas variáveis de ambiente do Netlify.");
+  if (!_openRouterKey) throw new Error("Chave OpenRouter não configurada. Adicione OPENROUTER_API_KEY nas variáveis de ambiente.");
 
   const fullPrompt = `Cinematic dark atmospheric 16:9 image, no text: ${prompt}`;
   const errors: string[] = [];
