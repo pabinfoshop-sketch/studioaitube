@@ -76,8 +76,11 @@ async function fetchAsBlobURL(url: string, mime: string, onProgress?: ProgressHa
   try {
     const res = await fetch(url, { credentials: "omit" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const total = Number(res.headers.get("content-length") ?? 0);
-    if (res.body && total > 0 && onProgress) {
+    const contentLength = Number(res.headers.get("content-length") ?? 0);
+    // CDN often serves gzip — content-length is compressed size, actual bytes are larger.
+    // Use the larger of content-length or 35MB (expected wasm size) for accurate %.
+    const total = Math.max(contentLength, 35 * 1_048_576);
+    if (res.body && onProgress) {
       const reader = res.body.getReader();
       const chunks: Uint8Array[] = [];
       let loaded = 0;
@@ -86,11 +89,12 @@ async function fetchAsBlobURL(url: string, mime: string, onProgress?: ProgressHa
         if (done) break;
         chunks.push(value);
         loaded += value.byteLength;
-        const pct = Math.round((loaded / total) * 100);
+        const pct = Math.min(99, Math.round((loaded / total) * 100));
         const mb = (loaded / 1_048_576).toFixed(1);
         onProgress(`Baixando ${label ?? "engine"}… ${mb}MB (${pct}%)`, { type: "engine-download", pct, mb });
       }
-      const buf = new Uint8Array(total);
+      // Build buffer from all chunks
+      const buf = new Uint8Array(loaded);
       let offset = 0;
       for (const chunk of chunks) { buf.set(chunk, offset); offset += chunk.byteLength; }
       return URL.createObjectURL(new Blob([buf], { type: mime }));
