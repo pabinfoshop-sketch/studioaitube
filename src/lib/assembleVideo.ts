@@ -70,34 +70,25 @@ async function safeFetchFile(url: string, onProgress?: ProgressHandler, label?: 
 }
 
 async function fetchAsBlobURL(url: string, mime: string, onProgress?: ProgressHandler, label?: string) {
-  // Under COEP, cross-origin fetches to CDNs often fail.
-  // Route everything through our server-side proxy to guarantee same-origin delivery.
-  const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
-
+  // Direct first (COEP credentialless allows CDN access, and avoids Cloudflare proxy limits for 30MB wasm)
   try {
+    return await toBlobURL(url, mime);
+  } catch {
+    console.warn("[toBlobURL failed, trying proxy]", label);
+  }
+  // Fallback: proxy
+  try {
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
     const res = await fetch(proxyUrl);
     if (!res.ok) throw new Error(`Proxy ${res.status}`);
-    const total = Number(res.headers.get("content-length") ?? 0);
-    if (res.body && total > 0 && onProgress) {
-      const reader = res.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let loaded = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        loaded += value.byteLength;
-        const pct = Math.round((loaded / total) * 100);
-        onProgress(`Baixando engine (${pct}%)…`, { type: "message", message: `Baixando engine (${pct}%)…` });
-      }
-      return URL.createObjectURL(new Blob(chunks as BlobPart[], { type: mime }));
-    }
     const buf = await res.arrayBuffer();
     return URL.createObjectURL(new Blob([buf], { type: mime }));
-  } catch (err) {
-    // If proxy fails (e.g. Cloudflare Workers size limit), try direct toBlobURL as last resort
-    console.warn("[proxy failed for ffmpeg load, trying direct toBlobURL]", err);
-    return await toBlobURL(url, mime);
+  } catch {
+    // Last resort: direct fetch
+    const res = await fetch(url, { credentials: "omit", cache: "force-cache" });
+    if (!res.ok) throw new Error(`${label ?? url}: HTTP ${res.status}`);
+    const buf = await res.arrayBuffer();
+    return URL.createObjectURL(new Blob([buf], { type: mime }));
   }
 }
 
@@ -187,7 +178,7 @@ export async function assembleVideo(
   );
 
   const sceneFiles: string[] = [];
-  const FPS = 30;
+  const FPS = 24;
 
   for (let i = 0; i < scenes.length; i++) {
     currentSceneIndex = i;
@@ -318,7 +309,7 @@ async function processStaticScene(
     throw new Error(`Falha ao baixar imagem da cena ${index + 1}: ${err?.message ?? String(err)}`);
   }
 
-  const totalFrames = Math.max(30, Math.round(durSec * fps));
+  const totalFrames = Math.max(24, Math.round(durSec * fps));
   const style = index % 5;
   const zExpr =
     style === 0 ? `min(zoom+0.0008,1.35)` :
@@ -334,9 +325,10 @@ async function processStaticScene(
                   `(iw-iw/zoom)*(on/${totalFrames})`;
   const yExpr =
     style === 4 ? `(ih-ih/zoom)*(on/${totalFrames})` : `ih/2-(ih/zoom/2)`;
+  // 1440x810 headroom (faster than 1920x1080, enough for 1280x720 zoompan)
   const vf = [
-    `scale=1920:1080:force_original_aspect_ratio=increase`,
-    `crop=1920:1080`,
+    `scale=1440:810:force_original_aspect_ratio=increase`,
+    `crop=1440:810`,
     `zoompan=z='${zExpr}':x='${xExpr}':y='${yExpr}':d=${totalFrames}:s=1280x720:fps=${fps}`,
     `setsar=1`,
   ].join(",");

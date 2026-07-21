@@ -45,15 +45,16 @@ export const Route = createFileRoute("/api/proxy")({
             return new Response(`Upstream ${res.status}`, { status: 502 });
           }
           const contentType = res.headers.get("content-type") || "application/octet-stream";
-          const buf = await res.arrayBuffer();
-          return new Response(buf, {
-            headers: {
-              "Content-Type": contentType,
-              "Cache-Control": "private, max-age=3600",
-              "Access-Control-Allow-Origin": "*",
-              "Cross-Origin-Resource-Policy": "cross-origin",
-            },
-          });
+          const contentLength = res.headers.get("content-length");
+          const headers: Record<string, string> = {
+            "Content-Type": contentType,
+            "Cache-Control": "private, max-age=3600",
+            "Access-Control-Allow-Origin": "*",
+            "Cross-Origin-Resource-Policy": "cross-origin",
+          };
+          if (contentLength) headers["Content-Length"] = contentLength;
+          // Stream directly (no memory buffer, supports large files)
+          return new Response(res.body, { headers });
         } catch (e: any) {
           return new Response(`Proxy error: ${e?.message ?? "unknown"}`, { status: 502 });
         }
