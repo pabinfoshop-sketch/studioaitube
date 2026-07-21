@@ -13,8 +13,10 @@ import { Route as StudioRouteImport } from './routes/studio'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTtsRouteImport } from './routes/api/tts'
 import { Route as ApiTrendsRouteImport } from './routes/api/trends'
+import { Route as ApiTiktokRouteImport } from './routes/api/tiktok'
 import { Route as ApiScriptRouteImport } from './routes/api/script'
 import { Route as ApiPublishRouteImport } from './routes/api/publish'
+import { Route as ApiProxyRouteImport } from './routes/api/proxy'
 import { Route as ApiImageRouteImport } from './routes/api/image'
 import { Route as ApiEnvRouteImport } from './routes/api/env'
 import { Route as ApiBalanceRouteImport } from './routes/api/balance'
@@ -40,6 +42,11 @@ const ApiTrendsRoute = ApiTrendsRouteImport.update({
   path: '/api/trends',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTiktokRoute = ApiTiktokRouteImport.update({
+  id: '/api/tiktok',
+  path: '/api/tiktok',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiScriptRoute = ApiScriptRouteImport.update({
   id: '/api/script',
   path: '/api/script',
@@ -48,6 +55,11 @@ const ApiScriptRoute = ApiScriptRouteImport.update({
 const ApiPublishRoute = ApiPublishRouteImport.update({
   id: '/api/publish',
   path: '/api/publish',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiProxyRoute = ApiProxyRouteImport.update({
+  id: '/api/proxy',
+  path: '/api/proxy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiImageRoute = ApiImageRouteImport.update({
@@ -78,8 +90,10 @@ export interface FileRoutesByFullPath {
   '/api/balance': typeof ApiBalanceRoute
   '/api/env': typeof ApiEnvRoute
   '/api/image': typeof ApiImageRoute
+  '/api/proxy': typeof ApiProxyRoute
   '/api/publish': typeof ApiPublishRoute
   '/api/script': typeof ApiScriptRoute
+  '/api/tiktok': typeof ApiTiktokRoute
   '/api/trends': typeof ApiTrendsRoute
   '/api/tts': typeof ApiTtsRoute
 }
@@ -90,8 +104,10 @@ export interface FileRoutesByTo {
   '/api/balance': typeof ApiBalanceRoute
   '/api/env': typeof ApiEnvRoute
   '/api/image': typeof ApiImageRoute
+  '/api/proxy': typeof ApiProxyRoute
   '/api/publish': typeof ApiPublishRoute
   '/api/script': typeof ApiScriptRoute
+  '/api/tiktok': typeof ApiTiktokRoute
   '/api/trends': typeof ApiTrendsRoute
   '/api/tts': typeof ApiTtsRoute
 }
@@ -103,8 +119,10 @@ export interface FileRoutesById {
   '/api/balance': typeof ApiBalanceRoute
   '/api/env': typeof ApiEnvRoute
   '/api/image': typeof ApiImageRoute
+  '/api/proxy': typeof ApiProxyRoute
   '/api/publish': typeof ApiPublishRoute
   '/api/script': typeof ApiScriptRoute
+  '/api/tiktok': typeof ApiTiktokRoute
   '/api/trends': typeof ApiTrendsRoute
   '/api/tts': typeof ApiTtsRoute
 }
@@ -117,8 +135,10 @@ export interface FileRouteTypes {
     | '/api/balance'
     | '/api/env'
     | '/api/image'
+    | '/api/proxy'
     | '/api/publish'
     | '/api/script'
+    | '/api/tiktok'
     | '/api/trends'
     | '/api/tts'
   fileRoutesByTo: FileRoutesByTo
@@ -129,8 +149,10 @@ export interface FileRouteTypes {
     | '/api/balance'
     | '/api/env'
     | '/api/image'
+    | '/api/proxy'
     | '/api/publish'
     | '/api/script'
+    | '/api/tiktok'
     | '/api/trends'
     | '/api/tts'
   id:
@@ -141,8 +163,10 @@ export interface FileRouteTypes {
     | '/api/balance'
     | '/api/env'
     | '/api/image'
+    | '/api/proxy'
     | '/api/publish'
     | '/api/script'
+    | '/api/tiktok'
     | '/api/trends'
     | '/api/tts'
   fileRoutesById: FileRoutesById
@@ -154,8 +178,10 @@ export interface RootRouteChildren {
   ApiBalanceRoute: typeof ApiBalanceRoute
   ApiEnvRoute: typeof ApiEnvRoute
   ApiImageRoute: typeof ApiImageRoute
+  ApiProxyRoute: typeof ApiProxyRoute
   ApiPublishRoute: typeof ApiPublishRoute
   ApiScriptRoute: typeof ApiScriptRoute
+  ApiTiktokRoute: typeof ApiTiktokRoute
   ApiTrendsRoute: typeof ApiTrendsRoute
   ApiTtsRoute: typeof ApiTtsRoute
 }
@@ -190,6 +216,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTrendsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/tiktok': {
+      id: '/api/tiktok'
+      path: '/api/tiktok'
+      fullPath: '/api/tiktok'
+      preLoaderRoute: typeof ApiTiktokRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/script': {
       id: '/api/script'
       path: '/api/script'
@@ -202,6 +235,13 @@ declare module '@tanstack/react-router' {
       path: '/api/publish'
       fullPath: '/api/publish'
       preLoaderRoute: typeof ApiPublishRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/proxy': {
+      id: '/api/proxy'
+      path: '/api/proxy'
+      fullPath: '/api/proxy'
+      preLoaderRoute: typeof ApiProxyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/image': {
@@ -242,8 +282,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBalanceRoute: ApiBalanceRoute,
   ApiEnvRoute: ApiEnvRoute,
   ApiImageRoute: ApiImageRoute,
+  ApiProxyRoute: ApiProxyRoute,
   ApiPublishRoute: ApiPublishRoute,
   ApiScriptRoute: ApiScriptRoute,
+  ApiTiktokRoute: ApiTiktokRoute,
   ApiTrendsRoute: ApiTrendsRoute,
   ApiTtsRoute: ApiTtsRoute,
 }
