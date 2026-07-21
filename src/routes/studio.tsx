@@ -104,7 +104,7 @@ function AnimatedBot({ label }: { label?: string }) {
 type BalanceResp = {
   free?: { ok: boolean; statusLabel?: string; error?: string };
   lovable?: { ok: boolean; statusLabel?: string; error?: string };
-  openrouter: { ok: boolean; balanceUsd?: number; usageUsd?: number; limitUsd?: number | null; statusLabel?: string; error?: string };
+  openrouter: { ok: boolean; balanceUsd?: number; usageUsd?: number; limitUsd?: number | null; statusLabel?: string; isFreeTier?: boolean; error?: string };
   replicate: { ok: boolean; raw?: any; statusLabel?: string; error?: string };
   order?: string[];
 };
@@ -128,8 +128,12 @@ function BalanceWidget() {
   const rp = data?.replicate;
   const free = data?.free;
   const fmt = (n?: number) => (typeof n === "number" ? `$${n.toFixed(2)}` : "—");
+  const orLabel = or?.ok
+    ? (or.balanceUsd != null ? fmt(or.balanceUsd) : (or.usageUsd != null ? `$${or.usageUsd.toFixed(4)}` : "ok"))
+    : "off";
+  const rpLabel = rp?.ok ? (rp.statusLabel ?? "ok") : "off";
   const title = data
-    ? `IA conectada\nOrdem: grátis → OpenRouter free → OpenRouter barato → Lovable backup\nOpenRouter: ${or?.ok ? fmt(or.balanceUsd) : or?.error ?? "off"}\nReplicate: ${rp?.ok ? rp.statusLabel ?? "conectado" : rp?.error ?? "off"}\nObs.: Replicate não expõe saldo pela API.`
+    ? `IA conectada\nOrdem: grátis → OpenRouter free → OpenRouter barato → Lovable backup\nOpenRouter: ${or?.ok ? (or.statusLabel ?? fmt(or.balanceUsd)) : or?.error ?? "off"}\nReplicate: ${rp?.ok ? rp.statusLabel ?? "conectado" : rp?.error ?? "off"}`
     : "Carregando status das IAs";
   return (
     <button
@@ -147,14 +151,14 @@ function BalanceWidget() {
         <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${or?.ok ? "bg-green-400" : "bg-red-400"} animate-pulse`} />
         <span className="hidden sm:inline text-muted-foreground">OpenRouter</span>
         <span className="sm:hidden text-muted-foreground">OR</span>
-        <span className="font-semibold truncate">{or?.ok ? fmt(or.balanceUsd) : "off"}</span>
+        <span className="font-semibold truncate">{orLabel}</span>
       </span>
       <span className="w-px h-3 bg-white/10 shrink-0" />
       <span className="flex items-center gap-1.5 min-w-0">
         <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${rp?.ok ? "bg-green-400" : "bg-red-400"} animate-pulse`} />
         <span className="hidden sm:inline text-muted-foreground">Replicate</span>
         <span className="sm:hidden text-muted-foreground">RP</span>
-        <span className="font-semibold truncate">{rp?.ok ? "ok" : "off"}</span>
+        <span className="font-semibold truncate">{rpLabel}</span>
       </span>
       {loading && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
     </button>

@@ -62,39 +62,41 @@ function rpHeaders(): Record<string, string> {
     : {};
 }
 
-// ── Balance (lightweight check) ──
+// ── Balance (server-side proxy to avoid CORS with Replicate) ──
 
 export async function clientBalance(): Promise<Record<string, any>> {
+  try {
+    const r = await fetch("/api/balance", { signal: AbortSignal.timeout(8000) });
+    if (r.ok) {
+      const server = await r.json();
+      return {
+        free: { provider: "free", ok: true, statusLabel: "fallback grátis ativo", raw: { tts: "google-free" } },
+        openrouter: { provider: "openrouter", ...server.openrouter },
+        replicate: { provider: "replicate", ...server.replicate },
+        order: ["free", "openrouter-free", "openrouter-cheap", "lovable-backup", "replicate-video"],
+      };
+    }
+  } catch { /* fallback below */ }
+
+  // Fallback: checks OpenRouter directly (has CORS), skips Replicate
   await ensureKeys();
   const k = hasKeys();
   const result: Record<string, any> = {
     free: { provider: "free", ok: true, statusLabel: "fallback grátis ativo", raw: { tts: "google-free" } },
-    lovable: { provider: "lovable", ok: false, error: "sem LOVABLE_API_KEY" },
-    openrouter: { provider: "openrouter", ok: false, error: k.openrouter ? "" : "sem chave configurada" },
-    replicate: { provider: "replicate", ok: false, error: k.replicate ? "" : "sem chave configurada" },
+    openrouter: { provider: "openrouter", ok: false, error: k.openrouter ? "servidor indisponível" : "sem chave configurada" },
+    replicate: { provider: "replicate", ok: false, error: k.replicate ? "servidor indisponível (CORS)" : "sem chave configurada" },
     order: ["free", "openrouter-free", "openrouter-cheap", "lovable-backup", "replicate-video"],
   };
   if (k.openrouter) {
     try {
-      const r = await fetch("https://openrouter.ai/api/v1/auth/key", { headers: { Authorization: `Bearer ${_openRouterKey}` } });
+      const r = await fetch("https://openrouter.ai/api/v1/auth/key", { headers: orHeaders() });
       if (r.ok) {
-        const d = await r.json();
-        result.openrouter = { provider: "openrouter", ok: true, balanceUsd: d.data?.limit_remaining, usageUsd: d.data?.limit?.length ? d.data?.limit[0]?.usage : 0, limitUsd: d.data?.limit?.length ? d.data?.limit[0]?.limit : null, keySource: "build+env" };
-      } else {
-        result.openrouter.error = `OpenRouter ${r.status}`;
+        const d: any = await r.json();
+        const data = d.data ?? {};
+        const hasCreditLimit = data.limit != null;
+        result.openrouter = { ok: true, balanceUsd: hasCreditLimit ? data.limit_remaining : undefined, usageUsd: data.usage ?? 0, statusLabel: hasCreditLimit ? `$${(data.limit_remaining ?? 0).toFixed(2)}` : `$${(data.usage ?? 0).toFixed(4)}`, isFreeTier: !!data.is_free_tier };
       }
-    } catch (e: any) { result.openrouter.error = e?.message || "falha de rede"; }
-  }
-  if (k.replicate) {
-    try {
-      const r = await fetch(`${REPLICATE_URL}/users/current`, { headers: rpHeaders() });
-      if (r.ok) {
-        const d = await r.json();
-        result.replicate = { provider: "replicate", ok: true, keySource: "build+env", statusLabel: "conectado", raw: { username: d.username, name: d.name, type: d.type } };
-      } else {
-        result.replicate.error = `Replicate ${r.status}`;
-      }
-    } catch (e: any) { result.replicate.error = e?.message || "falha de rede"; }
+    } catch { /* keep error */ }
   }
   return result;
 }
