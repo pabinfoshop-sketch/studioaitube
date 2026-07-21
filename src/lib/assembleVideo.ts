@@ -1,26 +1,21 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
-import ffmpegWasmAsset from "@/assets/ffmpeg-core.wasm.asset.json";
 
-let ffmpegInstance: FFmpeg | null = null;
-
+const FFMPEG_VERSION = "0.12.10";
 const FFMPEG_SOURCES = [
   {
-    label: "local",
-    coreURL: "/ffmpeg/ffmpeg-core.js",
-    wasmURL: ffmpegWasmAsset.url,
-  },
-  {
     label: "jsdelivr",
-    coreURL: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm/ffmpeg-core.js",
-    wasmURL: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm/ffmpeg-core.wasm",
+    coreURL: `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${FFMPEG_VERSION}/dist/esm/ffmpeg-core.js`,
+    wasmURL: `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${FFMPEG_VERSION}/dist/esm/ffmpeg-core.wasm`,
   },
   {
     label: "unpkg",
-    coreURL: "https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm/ffmpeg-core.js",
-    wasmURL: "https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm/ffmpeg-core.wasm",
+    coreURL: `https://unpkg.com/@ffmpeg/core@${FFMPEG_VERSION}/dist/esm/ffmpeg-core.js`,
+    wasmURL: `https://unpkg.com/@ffmpeg/core@${FFMPEG_VERSION}/dist/esm/ffmpeg-core.wasm`,
   },
 ];
+
+let ffmpegInstance: FFmpeg | null = null;
 
 export type AssembleEvent =
   | { type: "message"; message: string }
