@@ -1,55 +1,100 @@
 // ── Client-side AI calls ──────────────────────────────────────────
 // Bypasses Netlify Functions timeout by calling AI providers directly
-// from the browser. Keys come from VITE_* env vars injected at build.
+// from the browser. Keys come from:
+//   1) VITE_* env vars injected at build (vite.config.ts define mapping)
+//   2) /api/env endpoint as runtime fallback
 
-const OPENROUTER_KEY = (import.meta as any).env?.VITE_OPENROUTER_API_KEY || "";
-const REPLICATE_KEY = (import.meta as any).env?.VITE_REPLICATE_API_KEY || "";
-const ELEVENLABS_KEY = (import.meta as any).env?.VITE_ELEVENLABS_API_KEY || "";
+// ── Lazy key loading ───────────────────────────────────────────────
 
-// ── Helpers ──
+let _keysLoaded = false;
+let _keysLoading: Promise<void> | null = null;
+let _openRouterKey = (import.meta as any).env?.VITE_OPENROUTER_API_KEY || "";
+let _replicateKey = (import.meta as any).env?.VITE_REPLICATE_API_KEY || "";
+let _elevenLabsKey = (import.meta as any).env?.VITE_ELEVENLABS_API_KEY || "";
 
-const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
-const OR_HEADERS: Record<string, string> = OPENROUTER_KEY
-  ? { Authorization: `Bearer ${OPENROUTER_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://studioaitube.netlify.app", "X-Title": "AIDarkCesar" }
-  : {};
+async function ensureKeys(): Promise<void> {
+  if (_keysLoaded) return;
+  if (_keysLoading) return _keysLoading;
 
-const REPLICATE_URL = "https://api.replicate.com/v1";
-const RP_HEADERS: Record<string, string> = REPLICATE_KEY
-  ? { Authorization: `Bearer ${REPLICATE_KEY}` }
-  : {};
+  // Se as chaves já foram injetadas no build, não precisa buscar
+  if (_openRouterKey && _replicateKey) {
+    _keysLoaded = true;
+    return;
+  }
+
+  _keysLoading = (async () => {
+    try {
+      const r = await fetch("/api/env", { signal: AbortSignal.timeout(5000) });
+      if (r.ok) {
+        const d = await r.json();
+        if (!_openRouterKey) _openRouterKey = d.OPENROUTER_API_KEY || "";
+        if (!_replicateKey) _replicateKey = d.REPLICATE_API_KEY || "";
+        if (!_elevenLabsKey) _elevenLabsKey = d.ELEVENLABS_API_KEY || "";
+      }
+    } catch {
+      // Falha silenciosa — usa o que tem do build
+    }
+    _keysLoaded = true;
+    _keysLoading = null;
+  })();
+  return _keysLoading;
+}
 
 function hasKeys() {
-  return { openrouter: !!OPENROUTER_KEY, replicate: !!REPLICATE_KEY, elevenlabs: !!ELEVENLABS_KEY };
+  return { openrouter: !!_openRouterKey, replicate: !!_replicateKey, elevenlabs: !!_elevenLabsKey };
+}
+
+// ── Dynamic headers (built after keys are loaded) ──
+
+const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+function orHeaders(): Record<string, string> {
+  return _openRouterKey
+    ? { Authorization: `Bearer ${_openRouterKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://studioaitube.netlify.app", "X-Title": "AIDarkCesar" }
+    : {};
+}
+
+const REPLICATE_URL = "https://api.replicate.com/v1";
+
+function rpHeaders(): Record<string, string> {
+  return _replicateKey
+    ? { Authorization: `Bearer ${_replicateKey}` }
+    : {};
 }
 
 // ── Balance (lightweight check) ──
 
 export async function clientBalance(): Promise<Record<string, any>> {
+  await ensureKeys();
   const k = hasKeys();
   const result: Record<string, any> = {
     free: { provider: "free", ok: true, statusLabel: "fallback grátis ativo", raw: { tts: "google-free" } },
     lovable: { provider: "lovable", ok: false, error: "sem LOVABLE_API_KEY" },
-    openrouter: { provider: "openrouter", ok: false, error: "sem VITE_OPENROUTER_API_KEY" },
-    replicate: { provider: "replicate", ok: false, error: "sem VITE_REPLICATE_API_KEY" },
+    openrouter: { provider: "openrouter", ok: false, error: k.openrouter ? "" : "sem chave configurada" },
+    replicate: { provider: "replicate", ok: false, error: k.replicate ? "" : "sem chave configurada" },
     order: ["free", "openrouter-free", "openrouter-cheap", "lovable-backup", "replicate-video"],
   };
   if (k.openrouter) {
     try {
-      const r = await fetch("https://openrouter.ai/api/v1/auth/key", { headers: { Authorization: `Bearer ${OPENROUTER_KEY}` } });
+      const r = await fetch("https://openrouter.ai/api/v1/auth/key", { headers: { Authorization: `Bearer ${_openRouterKey}` } });
       if (r.ok) {
         const d = await r.json();
-        result.openrouter = { provider: "openrouter", ok: true, balanceUsd: d.data?.limit_remaining, usageUsd: d.data?.limit?.length ? d.data?.limit[0]?.usage : 0, limitUsd: d.data?.limit?.length ? d.data?.limit[0]?.limit : null, keySource: "VITE_OPENROUTER_API_KEY" };
+        result.openrouter = { provider: "openrouter", ok: true, balanceUsd: d.data?.limit_remaining, usageUsd: d.data?.limit?.length ? d.data?.limit[0]?.usage : 0, limitUsd: d.data?.limit?.length ? d.data?.limit[0]?.limit : null, keySource: "build+env" };
+      } else {
+        result.openrouter.error = `OpenRouter ${r.status}`;
       }
-    } catch { /* noop */ }
+    } catch (e: any) { result.openrouter.error = e?.message || "falha de rede"; }
   }
   if (k.replicate) {
     try {
-      const r = await fetch(`${REPLICATE_URL}/users/current`, { headers: RP_HEADERS });
+      const r = await fetch(`${REPLICATE_URL}/users/current`, { headers: rpHeaders() });
       if (r.ok) {
         const d = await r.json();
-        result.replicate = { provider: "replicate", ok: true, keySource: "VITE_REPLICATE_API_KEY", statusLabel: "conectado", raw: { username: d.username, name: d.name, type: d.type } };
+        result.replicate = { provider: "replicate", ok: true, keySource: "build+env", statusLabel: "conectado", raw: { username: d.username, name: d.name, type: d.type } };
+      } else {
+        result.replicate.error = `Replicate ${r.status}`;
       }
-    } catch { /* noop */ }
+    } catch (e: any) { result.replicate.error = e?.message || "falha de rede"; }
   }
   return result;
 }
@@ -67,6 +112,9 @@ const SCRIPT_MODELS = [
 ];
 
 export async function clientScript(topic: string, sceneCount: number, language = "pt-BR") {
+  await ensureKeys();
+  if (!_openRouterKey) throw new Error("Chave OpenRouter não configurada. Adicione OPENROUTER_API_KEY nas variáveis de ambiente do Netlify.");
+
   const prompt = `Você é roteirista e especialista em SEO de canais dark do YouTube (mistério, terror, sobrenatural, true crime).
 Crie um roteiro em ${language} sobre: "${topic}".
 Divida em exatamente ${sceneCount} cenas. Cada narração tem 3 a 5 frases densas, atmosfera sombria, ritmo cinematográfico e ganchos.
@@ -82,23 +130,31 @@ Também gere metadados otimizados para RANKEAR no YouTube:
 Responda APENAS com JSON válido, sem markdown, no formato:
 {"title":"","hook":"","seoTitle":"","seoDescription":"","tags":[],"thumbnailPrompt":"","thumbnailText":"","scenes":[{"title":"","narration":"","imagePrompt":""}]}`;
 
+  const errors: string[] = [];
   for (const model of SCRIPT_MODELS) {
     try {
       const r = await fetch(OR_URL, {
-        method: "POST", headers: OR_HEADERS,
+        method: "POST",
+        headers: orHeaders(),
         body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], response_format: { type: "json_object" } }),
       });
-      if (!r.ok) continue;
+      if (!r.ok) {
+        const t = await r.text().catch(() => "");
+        errors.push(`${model}: ${r.status} ${t.slice(0, 80)}`);
+        continue;
+      }
       const j = await r.json();
       const text: string = j?.choices?.[0]?.message?.content ?? "";
-      if (!text) continue;
+      if (!text) { errors.push(`${model}: resposta vazia`); continue; }
       const cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
       const match = cleaned.match(/\{[\s\S]*\}/);
-      if (!match) continue;
+      if (!match) { errors.push(`${model}: sem JSON`); continue; }
       return { ...JSON.parse(match[0]), modelUsed: `openrouter/${model}` };
-    } catch { continue; }
+    } catch (e: any) {
+      errors.push(`${model}: ${e?.message || "erro"}`);
+    }
   }
-  throw new Error("Todos os modelos falharam. Verifique VITE_OPENROUTER_API_KEY.");
+  throw new Error(`Todos os modelos falharam: ${errors.join(" | ")}`);
 }
 
 // ── Image Generation ──
@@ -109,14 +165,22 @@ const IMAGE_MODELS = [
 ];
 
 export async function clientImage(prompt: string): Promise<{ b64: string; mime: string; modelUsed: string }> {
+  await ensureKeys();
+  if (!_openRouterKey) throw new Error("Chave OpenRouter não configurada. Adicione OPENROUTER_API_KEY nas variáveis de ambiente do Netlify.");
+
   const fullPrompt = `Cinematic dark atmospheric 16:9 image, no text: ${prompt}`;
+  const errors: string[] = [];
   for (const model of IMAGE_MODELS) {
     try {
       const r = await fetch(OR_URL, {
-        method: "POST", headers: OR_HEADERS,
+        method: "POST",
+        headers: orHeaders(),
         body: JSON.stringify({ model, messages: [{ role: "user", content: fullPrompt }], modalities: ["image", "text"] }),
       });
-      if (!r.ok) continue;
+      if (!r.ok) {
+        errors.push(`${model}: ${r.status}`);
+        continue;
+      }
       const j: any = await r.json();
       const imgs = j?.choices?.[0]?.message?.images;
       const url: string | undefined = imgs?.[0]?.image_url?.url;
@@ -124,9 +188,12 @@ export async function clientImage(prompt: string): Promise<{ b64: string; mime: 
         const b64 = url.split(",")[1];
         return { b64, mime: "image/png", modelUsed: `openrouter/${model}` };
       }
-    } catch { continue; }
+      errors.push(`${model}: sem imagem no retorno`);
+    } catch (e: any) {
+      errors.push(`${model}: ${e?.message || "erro"}`);
+    }
   }
-  throw new Error("Falha ao gerar imagem. Verifique VITE_OPENROUTER_API_KEY.");
+  throw new Error(`Falha ao gerar imagem: ${errors.join(" | ")}`);
 }
 
 // ── TTS (Google Translate free fallback — runs entirely client-side) ──
@@ -148,14 +215,16 @@ function splitForGoogleTts(text: string, max = 190): string[] {
 }
 
 export async function clientTts(text: string, _voice?: string): Promise<Blob> {
+  await ensureKeys();
+
   // 1) ElevenLabs
-  if (ELEVENLABS_KEY) {
+  if (_elevenLabsKey) {
     const VOICE_MAP: Record<string, string> = { onyx: "JBFqnCBsd6RMkjVDRZzb", alloy: "EXAVITQu4vr4xnSDxMaL", echo: "TX3LPaxmHKxFdv7VOQHJ" };
     const voiceId = VOICE_MAP[_voice || "onyx"] || VOICE_MAP.onyx;
     try {
       const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
         method: "POST",
-        headers: { "xi-api-key": ELEVENLABS_KEY, "Content-Type": "application/json" },
+        headers: { "xi-api-key": _elevenLabsKey, "Content-Type": "application/json" },
         body: JSON.stringify({ text, model_id: "eleven_multilingual_v2", voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true } }),
       });
       if (r.ok) return await r.blob();
@@ -194,14 +263,15 @@ function dataUrlToBlob(dataUrl: string): { blob: Blob; name: string } {
 }
 
 export async function clientAnimate(imageDataUrl: string, prompt: string, onProgress?: (msg: string) => void): Promise<{ videoUrl: string; modelUsed: string }> {
-  if (!REPLICATE_KEY) throw new Error("Configure VITE_REPLICATE_API_KEY para animações.");
+  await ensureKeys();
+  if (!_replicateKey) throw new Error("Chave Replicate não configurada. Adicione REPLICATE_API_KEY nas variáveis de ambiente do Netlify.");
 
   // 1) Upload image
   onProgress?.("Enviando imagem para Replicate...");
   const { blob } = dataUrlToBlob(imageDataUrl);
   const form = new FormData();
   form.append("content", blob, "frame.png");
-  const upRes = await fetch(`${REPLICATE_URL}/files`, { method: "POST", headers: RP_HEADERS, body: form });
+  const upRes = await fetch(`${REPLICATE_URL}/files`, { method: "POST", headers: rpHeaders(), body: form });
   if (!upRes.ok) throw new Error(`Upload Replicate: ${upRes.status}`);
   const upJson: any = await upRes.json();
   const imageUrl: string = upJson?.urls?.get;
@@ -211,7 +281,7 @@ export async function clientAnimate(imageDataUrl: string, prompt: string, onProg
   onProgress?.("Criando predição de vídeo...");
   const createRes = await fetch(`${REPLICATE_URL}/models/${REPLICATE_MODEL}/predictions`, {
     method: "POST",
-    headers: { ...RP_HEADERS, "Content-Type": "application/json" },
+    headers: { ...rpHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({ input: { image: imageUrl, prompt: prompt || "cinematic subtle motion, camera drift, atmospheric" } }),
   });
   if (createRes.status === 402) throw new Error("Conta Replicate sem créditos. Ative billing em replicate.com/account/billing.");
@@ -224,7 +294,7 @@ export async function clientAnimate(imageDataUrl: string, prompt: string, onProg
   for (let i = 0; i < 80; i++) {
     await new Promise((r) => setTimeout(r, i < 5 ? 3000 : 5000));
     onProgress?.(`Gerando vídeo... (${i + 1}/${Math.min(40, 80)})`);
-    const r = await fetch(`${REPLICATE_URL}/predictions/${id}`, { headers: RP_HEADERS });
+    const r = await fetch(`${REPLICATE_URL}/predictions/${id}`, { headers: rpHeaders() });
     const j: any = await r.json();
     if (j.status === "succeeded") {
       const out = Array.isArray(j.output) ? j.output[0] : j.output;
