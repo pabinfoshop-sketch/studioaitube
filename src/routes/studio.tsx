@@ -568,7 +568,7 @@ function AssembleProgress({ state, images }: { state: AssembleProgressState; ima
                 </div>
                 <div className="text-center">
                   <div className="text-sm font-medium text-primary">Carregando Engine de Video</div>
-                  <div className="text-xs text-muted-foreground mt-1">ffmpeg.wasm (~30MB)</div>
+                  <div className="text-xs text-muted-foreground mt-1">Canvas nativo do navegador</div>
                 </div>
               </div>
             ) : isDone ? (
@@ -1158,7 +1158,7 @@ function Studio() {
                   disabled={assembling}
                   className="rounded-md btn-blue-gradient px-4 py-2 text-sm font-medium disabled:opacity-50"
                 >
-                  {assembling ? `Montando… ${assembleMsg}` : "Montar Vídeo MP4"}
+                  {assembling ? `Montando… ${assembleMsg}` : "Montar Vídeo"}
                 </button>
               </div>
               {thumbnail && (
@@ -1173,8 +1173,8 @@ function Studio() {
                 <div className="mt-4 space-y-2">
                   <video controls src={videoUrl} className="w-full rounded-md" />
                   <div className="flex flex-wrap gap-2">
-                    <a href={videoUrl} download="video-final.mp4" className="inline-block rounded-md btn-blue-gradient px-4 py-2 text-sm font-medium">
-                      ⬇ Baixar MP4 final
+                    <a href={videoUrl} download="video-final.webm" className="inline-block rounded-md btn-blue-gradient px-4 py-2 text-sm font-medium">
+                      ⬇ Baixar vídeo final
                     </a>
                     <PublishToMake videoUrl={videoUrl} script={script} thumbnail={thumbnail} />
                   </div>
@@ -1309,7 +1309,7 @@ function Studio() {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Dica: após gerar todas imagens + áudios, clique em "Montar Vídeo MP4". A render roda no seu navegador (ffmpeg.wasm) e pode levar alguns minutos.
+              Dica: após gerar todas imagens + áudios, clique em "Montar Vídeo MP4". A render usa Canvas nativo do navegador — rápido, sem download de engine.
             </p>
           </section>
         )}
