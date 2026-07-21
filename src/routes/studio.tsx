@@ -185,8 +185,8 @@ function ApiKeySettingsModal({ onClose }: { onClose: () => void }) {
     setTimeout(() => { setSaving(false); onClose(); }, 500);
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 pt-16 sm:pt-20 overflow-y-auto" onClick={onClose}>
+      <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl my-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-base font-bold text-white">Configurar API Keys</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-white transition"><X className="w-4 h-4" /></button>
