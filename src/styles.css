@@ -199,6 +199,26 @@
 @utility animate-float-slow {
   animation: float-slow 6s ease-in-out infinite;
 }
+@utility animate-fade-in {
+  animation: fade-in 0.5s ease-out both;
+}
+@utility animate-scale-in {
+  animation: scale-in 0.3s ease-out both;
+}
+@utility hover-scale {
+  &:hover {
+    transform: scale(1.03);
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
 
 #lovable-badge {
   display: none !important;
