@@ -121,6 +121,13 @@ function rpHeaders(): Record<string, string> {
 
 // ── Balance (server-side first, browser fallback) ──
 
+function parseOpenRouterCredits(data: any) {
+  const credits = Number(data.total_credits ?? 0);
+  const usage = Number(data.total_usage ?? 0);
+  const balanceUsd = Math.max(0, credits - usage);
+  return { ok: true as const, balanceUsd, usageUsd: usage, limitUsd: credits, isFreeTier: false, statusLabel: `$${balanceUsd.toFixed(2)}` };
+}
+
 function parseOpenRouterData(data: any) {
   const isFree = !!data.is_free_tier;
   const hasLimit = data.limit != null;
@@ -145,7 +152,7 @@ export async function clientBalance(): Promise<Record<string, any>> {
     order: ["free", "openrouter-free", "openrouter-cheap", "replicate-video"],
   };
 
-  // 1) PRIMEIRO: tenta /api/balance (server-side, sem CORS para nenhum provider)
+  // 1) PRIMEIRO: tenta /api/balance (server-side, sem CORS)
   try {
     const r = await fetch("/api/balance", { signal: AbortSignal.timeout(10000) });
     if (r.ok) {
@@ -157,24 +164,36 @@ export async function clientBalance(): Promise<Record<string, any>> {
 
   // 2) FALLBACK: chamada direta do browser (OpenRouter aceita CORS)
   if (!result.openrouter.ok && k.openrouter) {
+    // Tenta /v1/credits primeiro (saldo real)
     try {
-      const r = await fetch("https://openrouter.ai/api/v1/auth/key", {
+      const r = await fetch("https://openrouter.ai/api/v1/credits", {
         headers: orHeaders(),
         signal: AbortSignal.timeout(8000),
       });
       if (r.ok) {
         const d: any = await r.json();
-        result.openrouter = { provider: "openrouter", ...parseOpenRouterData(d.data ?? {}) };
+        result.openrouter = { provider: "openrouter", ...parseOpenRouterCredits(d.data ?? {}) };
       } else {
-        result.openrouter = { ok: false, error: `HTTP ${r.status}` };
+        throw new Error(`credits ${r.status}`);
       }
-    } catch (e: any) {
-      result.openrouter = { ok: false, error: e?.message || "falha de rede" };
+    } catch {
+      // Fallback para /v1/auth/key
+      try {
+        const r = await fetch("https://openrouter.ai/api/v1/auth/key", {
+          headers: orHeaders(),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (r.ok) {
+          const d: any = await r.json();
+          result.openrouter = { provider: "openrouter", ...parseOpenRouterData(d.data ?? {}) };
+        }
+      } catch (e: any) {
+        result.openrouter = { ok: false, error: e?.message || "falha de rede" };
+      }
     }
   }
 
-  // Replicate NUNCA funciona via browser (CORS bloqueado) —
-  // se /api/balance falhou, marca como indisponível
+  // Replicate NUNCA funciona via browser (CORS bloqueado)
   if (!result.replicate.ok && k.replicate) {
     result.replicate = { ok: false, error: "proxy indisponível" };
   }
