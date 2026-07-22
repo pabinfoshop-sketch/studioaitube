@@ -10,6 +10,7 @@ export const Route = createFileRoute("/api/balance")({
       GET: async () => {
         const orKey = process.env.OPENROUTER_API_KEY || "";
         const rpKey = process.env.REPLICATE_API_KEY || "";
+        const lovableKey = process.env.LOVABLE_API_KEY || "";
 
         const result: Record<string, any> = {
           openrouter: { ok: false, error: orKey ? "verificando..." : "sem chave no servidor" },
@@ -55,7 +56,7 @@ export const Route = createFileRoute("/api/balance")({
               } catch { /* ignore fallback */ }
               if (!result.openrouter.ok) {
                 const body = await r.text().catch(() => "");
-                result.openrouter = { ok: false, error: `HTTP ${r.status}: ${body.slice(0, 120)}` };
+                result.openrouter = { ok: false, error: r.status === 401 ? "chave inválida (401)" : `HTTP ${r.status}: ${body.slice(0, 120)}` };
               }
             }
           } catch (e: any) {
@@ -63,19 +64,24 @@ export const Route = createFileRoute("/api/balance")({
           }
         }
 
-        // Replicate — API não expõe saldo, mostra username
+        // Replicate — via conector Lovable quando disponível; a API não expõe saldo, mostra username
         if (rpKey) {
           try {
-            const r = await fetch("https://api.replicate.com/v1/account", {
-              headers: { Authorization: `Bearer ${rpKey}` },
+            const useConnector = !!lovableKey;
+            const r = await fetch(useConnector
+              ? "https://connector-gateway.lovable.dev/replicate/v1/account"
+              : "https://api.replicate.com/v1/account", {
+              headers: useConnector
+                ? { Authorization: `Bearer ${lovableKey}`, "X-Connection-Api-Key": rpKey }
+                : { Authorization: `Bearer ${rpKey}` },
               signal: AbortSignal.timeout(8000),
             });
             if (r.ok) {
               const d: any = await r.json();
-              result.replicate = { ok: true, statusLabel: `@${d.username}`, raw: { username: d.username, name: d.name, type: d.type } };
+              result.replicate = { ok: true, statusLabel: `@${d.username}`, mode: useConnector ? "connector" : "direct", raw: { username: d.username, name: d.name, type: d.type } };
             } else {
               const body = await r.text().catch(() => "");
-              result.replicate = { ok: false, error: `HTTP ${r.status}: ${body.slice(0, 120)}` };
+              result.replicate = { ok: false, error: r.status === 401 ? "conector inválido (401)" : `HTTP ${r.status}: ${body.slice(0, 120)}` };
             }
           } catch (e: any) {
             result.replicate = { ok: false, error: e?.message || "falha de rede" };

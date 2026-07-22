@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { getReplicateKey } from "@/lib/ai-env";
+import { getLovableKey, getReplicateKey } from "@/lib/ai-env";
 
 const Input = z.object({
   audioUrl: z.string().min(10),
@@ -9,6 +9,28 @@ const Input = z.object({
 
 const REPLICATE_MODEL = "openai/whisper-large-v3-turbo";
 const REPLICATE_DIRECT = "https://api.replicate.com/v1";
+const REPLICATE_GATEWAY = "https://connector-gateway.lovable.dev/replicate/v1";
+
+function getReplicateRuntime() {
+  const lovableKey = getLovableKey();
+  const directKey = getReplicateKey();
+  const connectorKey = process.env.LOVABLE_CONNECTOR_REPLICATE_API_KEY || directKey?.value;
+  if (lovableKey && connectorKey) {
+    return {
+      mode: "connector" as const,
+      baseUrl: REPLICATE_GATEWAY,
+      headers: { Authorization: `Bearer ${lovableKey.value}`, "X-Connection-Api-Key": connectorKey } as Record<string, string>,
+    };
+  }
+  if (directKey) {
+    return {
+      mode: "direct" as const,
+      baseUrl: REPLICATE_DIRECT,
+      headers: { Authorization: `Bearer ${directKey.value}` } as Record<string, string>,
+    };
+  }
+  return null;
+}
 
 export const Route = createFileRoute("/api/captions")({
   server: {
@@ -16,18 +38,18 @@ export const Route = createFileRoute("/api/captions")({
       POST: async ({ request }) => {
         try {
           const { audioUrl, language } = Input.parse(await request.json());
-          const rpKey = getReplicateKey();
-          if (!rpKey) {
+          const runtime = getReplicateRuntime();
+          if (!runtime) {
             return new Response("Replicate não configurado. Configure REPLICATE_API_KEY.", { status: 500 });
           }
 
           const headers: Record<string, string> = {
-            Authorization: `Bearer ${rpKey.value}`,
+            ...runtime.headers,
             "Content-Type": "application/json",
           };
 
           // Create prediction with Whisper
-          const createRes = await fetch(`${REPLICATE_DIRECT}/models/${REPLICATE_MODEL}/predictions`, {
+          const createRes = await fetch(`${runtime.baseUrl}/models/${REPLICATE_MODEL}/predictions`, {
             method: "POST",
             headers,
             body: JSON.stringify({
@@ -55,7 +77,7 @@ export const Route = createFileRoute("/api/captions")({
           // Poll (Whisper is fast, ~30s max)
           for (let i = 0; i < 40; i++) {
             await new Promise((r) => setTimeout(r, i < 5 ? 2000 : 3000));
-            const r = await fetch(`${REPLICATE_DIRECT}/predictions/${id}`, { headers: { Authorization: `Bearer ${rpKey.value}` } });
+            const r = await fetch(`${runtime.baseUrl}/predictions/${id}`, { headers: runtime.headers });
             const j: any = await r.json();
             const st = j?.status;
             if (st === "succeeded") {
@@ -64,17 +86,18 @@ export const Route = createFileRoute("/api/captions")({
               if (typeof output === "string") {
                 try {
                   const parsed = JSON.parse(output);
-                  return Response.json({ captions: parseWhisperOutput(parsed), modelUsed: `replicate/${REPLICATE_MODEL}`, raw: parsed });
+                  return Response.json({ captions: parseWhisperOutput(parsed), modelUsed: `replicate/${REPLICATE_MODEL}`, mode: runtime.mode, raw: parsed });
                 } catch {
                   // If output is plain text, create simple captions
                   return Response.json({
                     captions: [{ start: 0, end: 0, text: output }],
                     modelUsed: `replicate/${REPLICATE_MODEL}`,
+                    mode: runtime.mode,
                   });
                 }
               }
               if (typeof output === "object" && output !== null) {
-                return Response.json({ captions: parseWhisperOutput(output), modelUsed: `replicate/${REPLICATE_MODEL}`, raw: output });
+                return Response.json({ captions: parseWhisperOutput(output), modelUsed: `replicate/${REPLICATE_MODEL}`, mode: runtime.mode, raw: output });
               }
               return new Response("Formato de output inesperado.", { status: 502 });
             }

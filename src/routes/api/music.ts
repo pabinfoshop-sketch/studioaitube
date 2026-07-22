@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { getReplicateKey } from "@/lib/ai-env";
+import { getLovableKey, getReplicateKey } from "@/lib/ai-env";
 
 const Input = z.object({
   prompt: z.string().min(3),
@@ -10,6 +10,28 @@ const Input = z.object({
 
 const REPLICATE_MODEL = "meta/musicgen-melody";
 const REPLICATE_DIRECT = "https://api.replicate.com/v1";
+const REPLICATE_GATEWAY = "https://connector-gateway.lovable.dev/replicate/v1";
+
+function getReplicateRuntime() {
+  const lovableKey = getLovableKey();
+  const directKey = getReplicateKey();
+  const connectorKey = process.env.LOVABLE_CONNECTOR_REPLICATE_API_KEY || directKey?.value;
+  if (lovableKey && connectorKey) {
+    return {
+      mode: "connector" as const,
+      baseUrl: REPLICATE_GATEWAY,
+      headers: { Authorization: `Bearer ${lovableKey.value}`, "X-Connection-Api-Key": connectorKey } as Record<string, string>,
+    };
+  }
+  if (directKey) {
+    return {
+      mode: "direct" as const,
+      baseUrl: REPLICATE_DIRECT,
+      headers: { Authorization: `Bearer ${directKey.value}` } as Record<string, string>,
+    };
+  }
+  return null;
+}
 
 export const Route = createFileRoute("/api/music")({
   server: {
@@ -17,19 +39,19 @@ export const Route = createFileRoute("/api/music")({
       POST: async ({ request }) => {
         try {
           const { prompt, duration, mood } = Input.parse(await request.json());
-          const rpKey = getReplicateKey();
-          if (!rpKey) {
+          const runtime = getReplicateRuntime();
+          if (!runtime) {
             return new Response("Replicate não configurado. Configure REPLICATE_API_KEY.", { status: 500 });
           }
 
           const headers: Record<string, string> = {
-            Authorization: `Bearer ${rpKey.value}`,
+            ...runtime.headers,
             "Content-Type": "application/json",
           };
 
           const fullPrompt = `${mood} background music, cinematic, atmospheric, ${prompt}, instrumental, no vocals, ambient, dark, ominous, suspenseful`;
 
-          const createRes = await fetch(`${REPLICATE_DIRECT}/models/${REPLICATE_MODEL}/predictions`, {
+          const createRes = await fetch(`${runtime.baseUrl}/models/${REPLICATE_MODEL}/predictions`, {
             method: "POST",
             headers,
             body: JSON.stringify({
@@ -58,13 +80,13 @@ export const Route = createFileRoute("/api/music")({
           // Poll (musicgen takes ~1-3 min)
           for (let i = 0; i < 60; i++) {
             await new Promise((r) => setTimeout(r, i < 5 ? 3000 : 5000));
-            const r = await fetch(`${REPLICATE_DIRECT}/predictions/${id}`, { headers: { Authorization: `Bearer ${rpKey.value}` } });
+            const r = await fetch(`${runtime.baseUrl}/predictions/${id}`, { headers: runtime.headers });
             const j: any = await r.json();
             const st = j?.status;
             if (st === "succeeded") {
               const out = Array.isArray(j.output) ? j.output[0] : j.output;
               if (!out) return new Response("Sem output de áudio.", { status: 502 });
-              return Response.json({ audioUrl: out, modelUsed: `replicate/${REPLICATE_MODEL}` });
+              return Response.json({ audioUrl: out, modelUsed: `replicate/${REPLICATE_MODEL}`, mode: runtime.mode });
             }
             if (st === "failed" || st === "canceled") {
               return new Response(`Predição ${st}: ${j?.error ?? "sem detalhe"}`, { status: 502 });
