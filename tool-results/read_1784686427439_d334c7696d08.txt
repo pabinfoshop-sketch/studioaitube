@@ -1,0 +1,772 @@
+  1032→      <main className="relative max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
+  1033→        <div className="text-center space-y-3">
+  1034→          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs">
+  1035→            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+  1036→            Agente IA online -- pronto para criar
+  1037→          </div>
+  1038→          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-primary to-accent bg-clip-text text-transparent">
+  1039→            Studio Dark YouTube
+  1040→          </h1>
+  1041→          <p className="text-muted-foreground max-w-xl mx-auto">
+  1042→            Roteiro, narracao e imagens cinematograficas geradas por IA -- prontas para render em MP4.
+  1043→          </p>
+  1044→        </div>
+  1045→
+  1046→        {/* ── TIKTOK AI FEATURES BAR ── */}
+  1047→        <div className="rounded-2xl border border-[#00f2ea]/20 bg-gradient-to-r from-[#00f2ea]/5 via-[#ff0050]/5 to-[#00f2ea]/5 p-4 sm:p-5 space-y-4">
+  1048→          <div className="flex items-center gap-2">
+  1049→            <Smartphone className="w-4 h-4 text-[#00f2ea]" />
+  1050→            <span className="text-sm font-bold text-[#00f2ea]">TikTok AI Features</span>
+  1051→            <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#ff0050]/20 text-[#ff0050] font-semibold animate-pulse">NOVO</span>
+  1052→          </div>
+  1053→
+  1054→          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+  1055→            {/* Format toggle: 16:9 vs 9:16 */}
+  1056→            <div className="space-y-2">
+  1057→              <label className="text-xs text-muted-foreground flex items-center gap-1.5">
+  1058→                <MonitorPlay className="w-3.5 h-3.5" /> Formato do video
+  1059→              </label>
+  1060→              <div className="grid grid-cols-2 gap-2">
+  1061→                <button
+  1062→                  type="button"
+  1063→                  onClick={() => setVideoFormat("16:9")}
+  1064→                  className={`rounded-xl border p-3 text-center transition-all ${
+  1065→                    videoFormat === "16:9"
+  1066→                      ? "border-primary/60 bg-primary/20 ring-1 ring-primary/30"
+  1067→                      : "border-white/10 bg-white/5 hover:bg-white/10"
+  1068→                  }`}
+  1069→                >
+  1070→                  <div className={`w-8 h-4.5 mx-auto rounded-sm border-2 mb-1.5 ${videoFormat === "16:9" ? "border-primary" : "border-muted-foreground/40"}`} style={{ aspectRatio: "16/9" }} />
+  1071→                  <div className="text-xs font-semibold">16:9</div>
+  1072→                  <div className="text-[10px] text-muted-foreground">YouTube</div>
+  1073→                </button>
+  1074→                <button
+  1075→                  type="button"
+  1076→                  onClick={() => setVideoFormat("9:16")}
+  1077→                  className={`rounded-xl border p-3 text-center transition-all ${
+  1078→                    videoFormat === "9:16"
+  1079→                      ? "border-[#00f2ea]/60 bg-[#00f2ea]/20 ring-1 ring-[#00f2ea]/30"
+  1080→                      : "border-white/10 bg-white/5 hover:bg-white/10"
+  1081→                  }`}
+  1082→                >
+  1083→                  <div className={`w-3.5 h-6 mx-auto rounded-sm border-2 mb-1.5 ${videoFormat === "9:16" ? "border-[#00f2ea]" : "border-muted-foreground/40"}`} style={{ aspectRatio: "9/16" }} />
+  1084→                  <div className="text-xs font-semibold">9:16</div>
+  1085→                  <div className="text-[10px] text-muted-foreground">TikTok/Shorts</div>
+  1086→                </button>
+  1087→              </div>
+  1088→            </div>
+  1089→
+  1090→            {/* Caption style */}
+  1091→            <div className="space-y-2">
+  1092→              <label className="text-xs text-muted-foreground flex items-center gap-1.5">
+  1093→                <Type className="w-3.5 h-3.5" /> Legendas TikTok
+  1094→              </label>
+  1095→              <div className="space-y-1.5">
+  1096→                {([
+  1097→                  { id: "off" as CaptionStyle, label: "Desligado", desc: "Sem legendas" },
+  1098→                  { id: "tiktok" as CaptionStyle, label: "TikTok", desc: "Roxo, palavra-por-palavra" },
+  1099→                  { id: "tiktok-bold" as CaptionStyle, label: "TikTok Bold", desc: "Vermelho, destaque forte" },
+  1100→                  { id: "karaoke" as CaptionStyle, label: "Karaoke", desc: "Dourado + vermelho" },
+  1101→                ]).map((opt) => (
+  1102→                  <button
+  1103→                    key={opt.id}
+  1104→                    type="button"
+  1105→                    onClick={() => setCaptionStyle(opt.id)}
+  1106→                    className={`w-full rounded-lg border px-3 py-1.5 text-left transition-all text-xs ${
+  1107→                      captionStyle === opt.id
+  1108→                        ? "border-primary/60 bg-primary/20"
+  1109→                        : "border-white/10 bg-white/5 hover:bg-white/10"
+  1110→                    }`}
+  1111→                  >
+  1112→                    <span className="font-medium">{opt.label}</span>
+  1113→                    <span className="text-muted-foreground ml-1.5">-- {opt.desc}</span>
+  1114→                  </button>
+  1115→                ))}
+  1116→              </div>
+  1117→            </div>
+  1118→
+  1119→            {/* Transition type */}
+  1120→            <div className="space-y-2">
+  1121→              <label className="text-xs text-muted-foreground flex items-center gap-1.5">
+  1122→                <Zap className="w-3.5 h-3.5" /> Transicoes
+  1123→              </label>
+  1124→              <div className="space-y-1.5">
+  1125→                {([
+  1126→                  { id: "none" as TransitionType, label: "Corte direto", desc: "Sem transicao" },
+  1127→                  { id: "fade" as TransitionType, label: "Fade", desc: "Suave fade in/out" },
+  1128→                  { id: "slide-left" as TransitionType, label: "Slide", desc: "Desliza para esquerda" },
+  1129→                  { id: "glitch" as TransitionType, label: "Glitch", desc: "Efeito glitch/digital" },
+  1130→                ]).map((opt) => (
+  1131→                  <button
+  1132→                    key={opt.id}
+  1133→                    type="button"
+  1134→                    onClick={() => setTransitionType(opt.id)}
+  1135→                    className={`w-full rounded-lg border px-3 py-1.5 text-left transition-all text-xs ${
+  1136→                      transitionType === opt.id
+  1137→                        ? "border-[#ff0050]/60 bg-[#ff0050]/20"
+  1138→                        : "border-white/10 bg-white/5 hover:bg-white/10"
+  1139→                    }`}
+  1140→                  >
+  1141→                    <span className="font-medium">{opt.label}</span>
+  1142→                    <span className="text-muted-foreground ml-1.5">-- {opt.desc}</span>
+  1143→                  </button>
+  1144→                ))}
+  1145→              </div>
+  1146→            </div>
+  1147→          </div>
+  1148→
+  1149→          {/* Active options summary */}
+  1150→          <div className="flex flex-wrap gap-2 pt-1">
+  1151→            <span className="text-[10px] rounded-full bg-white/5 border border-white/10 px-2.5 py-0.5 text-muted-foreground">
+  1152→              Formato: <b className="text-foreground">{videoFormat === "9:16" ? "9:16 (TikTok/Shorts)" : "16:9 (YouTube)"}</b>
+  1153→            </span>
+  1154→            {captionStyle !== "off" && (
+  1155→              <span className="text-[10px] rounded-full bg-[#ff0050]/10 border border-[#ff0050]/30 px-2.5 py-0.5 text-[#ff0050]">
+  1156→                Legendas: <b>{captionStyle}</b>
+  1157→              </span>
+  1158→            )}
+  1159→            {transitionType !== "none" && (
+  1160→              <span className="text-[10px] rounded-full bg-primary/10 border border-primary/30 px-2.5 py-0.5 text-primary">
+  1161→                Transicao: <b>{transitionType}</b>
+  1162→              </span>
+  1163→            )}
+  1164→          </div>
+  1165→        </div>
+  1166→
+  1167→        <form onSubmit={onGenerate} className="space-y-3 rounded-2xl border border-white/10 bg-white/5 backdrop-blur p-4 sm:p-6 shadow-2xl">
+  1168→          <label className="block text-sm font-medium">Tema do video</label>
+  1169→          <textarea
+  1170→            value={topic} onChange={(e) => setTopic(e.target.value)}
+  1171→            placeholder="Ex.: A verdadeira historia por tras da casa mais assombrada dos EUA"
+  1172→            className="w-full min-h-24 rounded-lg bg-black/40 border border-white/10 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition"
+  1173→          />
+  1174→          <div className="flex flex-wrap items-center gap-3">
+  1175→            <label className="text-sm flex items-center gap-1 shrink-0"><Film className="w-4 h-4" />Cenas:</label>
+  1176→            <div className="inline-flex items-stretch rounded-md border border-white/10 bg-black/40 overflow-hidden shrink-0">
+  1177→              <button
+  1178→                type="button"
+  1179→                aria-label="Diminuir cenas"
+  1180→                onClick={() => setCount(Math.max(1, (Number(count) || 1) - 1))}
+  1181→                className="px-3 text-lg leading-none hover:bg-white/10 active:bg-white/20 select-none"
+  1182→              >-</button>
+  1183→              <input
+  1184→                type="number" inputMode="numeric" min={1} max={50} value={count}
+  1185→                onChange={(e) => {
+  1186→                  const v = e.target.value;
+  1187→                  if (v === "") { setCount(0 as any); return; }
+  1188→                  const n = parseInt(v, 10);
+  1189→                  if (!isNaN(n)) setCount(Math.min(50, Math.max(1, n)));
+  1190→                }}
+  1191→                onBlur={(e) => { const n = parseInt(e.target.value, 10); if (isNaN(n) || n < 3) setCount(8); }}
+  1192→                className="w-14 text-center bg-transparent border-x border-white/10 p-2 text-sm focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+  1193→              />
+  1194→              <button
+  1195→                type="button"
+  1196→                aria-label="Aumentar cenas"
+  1197→                onClick={() => setCount(Math.min(50, (Number(count) || 0) + 1))}
+  1198→                className="px-3 text-lg leading-none hover:bg-white/10 active:bg-white/20 select-none"
+  1199→              >+</button>
+  1200→            </div>
+  1201→            <button disabled={loading} className="w-full sm:w-auto sm:ml-auto rounded-lg btn-blue-gradient px-5 py-2.5 text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2">
+  1202→              {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Gerando...</> : <><Wand2 className="w-4 h-4" />Gerar roteiro</>}
+  1203→            </button>
+  1204→          </div>
+  1205→
+  1206→          <div className="flex items-center gap-3 flex-wrap pt-1">
+  1207→            <label className="text-sm flex items-center gap-1"><Mic2 className="w-4 h-4" />Voz:</label>
+  1208→            <select
+  1209→              value={voice}
+  1210→              onChange={(e) => { setVoice(e.target.value as VoiceId); setVoiceTouched(true); }}
+  1211→              className="rounded-md bg-black/40 border border-white/10 p-2 text-sm flex-1 min-w-56"
+  1212→            >
+  1213→              {VOICES.map((v) => (
+  1214→                <option key={v.id} value={v.id}>{v.label} -- {v.desc}</option>
+  1215→              ))}
+  1216→            </select>
+  1217→            {!voiceTouched && topic.trim().length > 4 && (
+  1218→              <span className="text-xs text-primary/80 flex items-center gap-1">
+  1219→                <Sparkles className="w-3 h-3" /> sugerida pelo tema
+  1220→              </span>
+  1221→            )}
+  1222→          </div>
+  1223→        </form>
+  1224→
+  1225→        {loading && <AgentWorkingPreview modelUsed={script?.modelUsed} />}
+  1226→
+  1227→        {!loading && (
+  1228→          <ChannelPlanner
+  1229→            onPick={(t) => { setTopic(t); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+  1230→            history={history}
+  1231→            onDeleteHistory={(id) => saveHistory(history.filter((h) => h.id !== id))}
+  1232→          />
+  1233→        )}
+  1234→
+  1235→        {script && (
+  1236→          <section className="space-y-6">
+  1237→            <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+  1238→              {script.notice && (
+  1239→                <div className="mb-4 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+  1240→                  {script.notice}
+  1241→                </div>
+  1242→              )}
+  1243→              <div className="flex items-center justify-between gap-3 flex-wrap">
+  1244→                <div className="text-xs uppercase text-muted-foreground">Titulo</div>
+  1245→                {script.modelUsed && (
+  1246→                  <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+  1247→                    <Sparkles className="w-3 h-3" /> Roteiro por {script.modelUsed}
+  1248→                  </span>
+  1249→                )}
+  1250→              </div>
+  1251→              <h2 className="text-xl font-semibold">{script.title}</h2>
+  1252→              {script.seoTitle && (
+  1253→                <>
+  1254→                  <div className="mt-3 text-xs uppercase text-muted-foreground flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Titulo SEO ({script.seoTitle.length}/70)</div>
+  1255→                  <p className="text-sm font-medium text-primary">{script.seoTitle}</p>
+  1256→                </>
+  1257→              )}
+  1258→              <div className="mt-3 text-xs uppercase text-muted-foreground">Hook</div>
+  1259→              <p className="text-sm">{script.hook}</p>
+  1260→              {script.tags && script.tags.length > 0 && (
+  1261→                <>
+  1262→                  <div className="mt-3 text-xs uppercase text-muted-foreground">Tags SEO ({script.tags.length})</div>
+  1263→                  <div className="flex flex-wrap gap-1 mt-1">
+  1264→                    {script.tags.map((t) => (
+  1265→                      <span key={t} className="text-[10px] rounded-full bg-white/10 border border-white/10 px-2 py-0.5">{t}</span>
+  1266→                    ))}
+  1267→                  </div>
+  1268→                </>
+  1269→              )}
+  1270→              <div className="mt-4 flex flex-wrap gap-3">
+  1271→                <button onClick={genAll} className="rounded-md btn-blue-gradient px-4 py-2 text-sm font-medium">
+  1272→                  Gerar todas imagens + audios
+  1273→                </button>
+  1274→                <button
+  1275→                  onClick={genThumbnail}
+  1276→                  disabled={thumbBusy}
+  1277→                  className="rounded-md border border-primary/40 bg-primary/20 hover:bg-primary/30 text-primary px-4 py-2 text-sm font-medium disabled:opacity-50"
+  1278→                >
+  1279→                  {thumbBusy ? "Gerando thumb..." : thumbnail ? "Regerar Thumbnail" : "Gerar Thumbnail"}
+  1280→                </button>
+  1281→                <button
+  1282→                  onClick={animateKeyScenes}
+  1283→                  className="rounded-md border border-accent/40 bg-accent/20 hover:bg-accent/30 text-accent px-4 py-2 text-sm font-medium"
+  1284→                >
+  1285→                  Animar cenas-chave (~{(keySceneIndexes(script.scenes.length).length * 0.05).toFixed(2)} USD)
+  1286→                </button>
+  1287→                <button
+  1288→                  onClick={onAssemble}
+  1289→                  disabled={assembling}
+  1290→                  className="rounded-md btn-blue-gradient px-4 py-2 text-sm font-medium disabled:opacity-50"
+  1291→                >
+  1292→                  {assembling ? `Montando... ${assembleMsg}` : `Montar Video ${videoFormat === "9:16" ? "(TikTok 9:16)" : "(YouTube 16:9)"}`}
+  1293→                </button>
+  1294→              </div>
+  1295→              {thumbnail && (
+  1296→                <div className="mt-4 space-y-2">
+  1297→                  <div className="text-xs uppercase text-muted-foreground">Thumbnail 1280x720</div>
+  1298→                  <img src={thumbnail} alt="Thumbnail" className="w-full max-w-md rounded-lg border border-white/10" />
+  1299→                  <a href={thumbnail} download="thumbnail.jpg" className="text-xs underline">Baixar thumbnail JPG</a>
+  1300→                </div>
+  1301→              )}
+  1302→              {assembling && assembleProgress && <AssembleProgress state={assembleProgress} images={images} isVertical={videoFormat === "9:16"} />}
+  1303→              {videoUrl && (
+  1304→                <div className="mt-4 space-y-2">
+  1305→                  <div className={`rounded-lg overflow-hidden border border-white/10 ${videoFormat === "9:16" ? "max-w-sm mx-auto" : ""}`}>
+  1306→                    <video controls src={videoUrl} className={`w-full ${videoFormat === "9:16" ? "aspect-[9/16]" : ""}`} />
+  1307→                  </div>
+  1308→                  <div className="flex flex-wrap gap-2">
+  1309→                    <a href={videoUrl} download={`video-final${videoFormat === "9:16" ? "-tiktok" : ""}.webm`} className="inline-block rounded-md btn-blue-gradient px-4 py-2 text-sm font-medium">
+  1310→                      Baixar video final ({videoFormat})
+  1311→                    </a>
+  1312→                    <PublishToMake videoUrl={videoUrl} script={script} thumbnail={thumbnail} />
+  1313→                    <PublishToTikTok videoUrl={videoUrl} script={script} />
+  1314→                  </div>
+  1315→                </div>
+  1316→              )}
+  1317→            </div>
+  1318→
+  1319→            <div className="space-y-4">
+  1320→              {script.scenes.map((sc, i) => (
+  1321→                <div
+  1322→                  key={i}
+  1323→                  className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-3 animate-fade-in hover:border-primary/30 hover:bg-white/[0.07] transition"
+  1324→                  style={{ animationDelay: `${i * 60}ms`, animationFillMode: "backwards" }}
+  1325→                >
+  1326→                  <div className="flex items-center justify-between gap-2">
+  1327→                    <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+  1328→                      Cena {i + 1}
+  1329→                      {keySceneIndexes(script.scenes.length).includes(i) && (
+  1330→                        <span className="text-[10px] rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-accent">chave</span>
+  1331→                      )}
+  1332→                    </div>
+  1333→                    <input
+  1334→                      value={sc.title}
+  1335→                      onChange={(e) => setScript((prev) => prev && { ...prev, scenes: prev.scenes.map((s, idx) => idx === i ? { ...s, title: e.target.value } : s) })}
+  1336→                      className="flex-1 bg-transparent border-b border-white/10 focus:border-primary/60 outline-none font-semibold text-sm py-1"
+  1337→                    />
+  1338→                  </div>
+  1339→                  <textarea
+  1340→                    value={sc.narration}
+  1341→                    onChange={(e) => setScript((prev) => prev && { ...prev, scenes: prev.scenes.map((s, idx) => idx === i ? { ...s, narration: e.target.value } : s) })}
+  1342→                    rows={4}
+  1343→                    className="w-full rounded-md bg-black/30 border border-white/10 focus:border-primary/60 outline-none p-2 text-sm leading-relaxed resize-y"
+  1344→                    placeholder="Narracao da cena..."
+  1345→                  />
+  1346→                  <details className="text-xs text-muted-foreground">
+  1347→                    <summary className="cursor-pointer">Image prompt (editar)</summary>
+  1348→                    <textarea
+  1349→                      value={sc.imagePrompt}
+  1350→                      onChange={(e) => setScript((prev) => prev && { ...prev, scenes: prev.scenes.map((s, idx) => idx === i ? { ...s, imagePrompt: e.target.value } : s) })}
+  1351→                      rows={2}
+  1352→                      className="mt-1 w-full rounded-md bg-black/30 border border-white/10 focus:border-primary/60 outline-none p-2 text-xs resize-y"
+  1353→                    />
+  1354→                  </details>
+  1355→
+  1356→                  <div className="grid md:grid-cols-2 gap-4">
+  1357→                    <div className="space-y-2">
+  1358→                      <div className="flex flex-wrap gap-2">
+  1359→                        <button
+  1360→                          disabled={busy[`img${i}`]}
+  1361→                          onClick={() => genImage(i, sc.imagePrompt)}
+  1362→                          className="rounded-md bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs disabled:opacity-50"
+  1363→                        >
+  1364→                          {busy[`img${i}`] ? "Gerando imagem..." : images[i] ? "Regenerar imagem" : "Gerar imagem"}
+  1365→                        </button>
+  1366→                        {images[i]?.final && (
+  1367→                          <button
+  1368→                            disabled={busy[`img${i}`]}
+  1369→                            onClick={() => {
+  1370→                              const seed = Math.floor(Math.random() * 9999);
+  1371→                              const variants = ["different angle", "alternative composition", "new lighting", "wider shot", "closer shot", "different mood"];
+  1372→                              const v = variants[seed % variants.length];
+  1373→                              genImage(i, `${sc.imagePrompt}, ${v}, variation ${seed}`);
+  1374→                            }}
+  1375→                            className="rounded-md bg-primary/20 hover:bg-primary/30 border border-primary/40 text-primary px-3 py-1.5 text-xs disabled:opacity-50"
+  1376→                          >
+  1377→                            Outra imagem
+  1378→                          </button>
+  1379→                        )}
+  1380→                      </div>
+  1381→                      {images[i] && (
+  1382→                        <div className="space-y-2">
+  1383→                          <img
+  1384→                            src={images[i].url}
+  1385→                            className={`w-full rounded-md transition-[filter] ${images[i].final ? "" : "blur-lg"}`}
+  1386→                            alt=""
+  1387→                          />
+  1388→                          {images[i].final && (
+  1389→                            <div className="flex items-center gap-2 flex-wrap">
+  1390→                              <a href={images[i].url} download={`cena-${i + 1}.png`} className="text-xs underline">Baixar PNG</a>
+  1391→                              {images[i].modelUsed && (
+  1392→                                <span className="text-[10px] rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-primary">
+  1393→                                  {images[i].modelUsed}
+  1394→                                </span>
+  1395→                              )}
+  1396→                            </div>
+  1397→                          )}
+  1398→                        </div>
+  1399→                      )}
+  1400→                    </div>
+  1401→                    <div className="space-y-2">
+  1402→                      <button
+  1403→                        disabled={busy[`aud${i}`]}
+  1404→                        onClick={() => genAudio(i, sceneNarration(sc, i, script.title))}
+  1405→                        className="rounded-md bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs disabled:opacity-50"
+  1406→                      >
+  1407→                        {busy[`aud${i}`] ? "Gerando audio..." : audios[i] ? "Regenerar audio" : "Gerar narracao"}
+  1408→                      </button>
+  1409→                      {audios[i] && (
+  1410→                        <div className="space-y-1">
+  1411→                          <audio controls src={audios[i]} className="w-full" />
+  1412→                          <a href={audios[i]} download={`cena-${i + 1}.mp3`} className="text-xs underline">Baixar MP3</a>
+  1413→                        </div>
+  1414→                      )}
+  1415→                    </div>
+  1416→                  </div>
+  1417→                  {images[i]?.final && (
+  1418→                    <div className="pt-2 border-t border-white/10 space-y-2">
+  1419→                      <button
+  1420→                        disabled={busy[`vid${i}`]}
+  1421→                        onClick={() => genAnimate(i, sc.imagePrompt)}
+  1422→                        className="rounded-md bg-accent/20 hover:bg-accent/30 border border-accent/40 text-accent px-3 py-1.5 text-xs disabled:opacity-50"
+  1423→                      >
+  1424→                        {busy[`vid${i}`] ? "Animando (Replicate, ~1-2 min)..." : videos[i] ? "Re-animar cena" : "Animar cena (dar vida)"}
+  1425→                      </button>
+  1426→                      {videos[i] && (
+  1427→                        <div className="space-y-1">
+  1428→                          <video controls src={videos[i].url} className="w-full rounded-md" />
+  1429→                          <div className="flex items-center gap-2 flex-wrap">
+  1430→                            <a href={videos[i].url} download={`cena-${i + 1}.mp4`} className="text-xs underline">Baixar MP4</a>
+  1431→                            {videos[i].modelUsed && (
+  1432→                              <span className="text-[10px] rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-accent">
+  1433→                                {videos[i].modelUsed}
+  1434→                              </span>
+  1435→                            )}
+  1436→                          </div>
+  1437→                        </div>
+  1438→                      )}
+  1439→                    </div>
+  1440→                  )}
+  1441→                </div>
+  1442→              ))}
+  1443→            </div>
+  1444→
+  1445→            <p className="text-xs text-muted-foreground">
+  1446→              Dica: apos gerar todas imagens + audios, configure o formato e legendas no painel TikTok AI acima, depois clique em "Montar Video".
+  1447→            </p>
+  1448→          </section>
+  1449→        )}
+  1450→      </main>
+  1451→    </div>
+  1452→  );
+  1453→}
+  1454→
+  1455→const LS_MAKE_WEBHOOK = "aidc.makeWebhook";
+  1456→
+  1457→function PublishToMake({ videoUrl, script, thumbnail }: { videoUrl: string; script: Script; thumbnail?: string | null }) {
+  1458→  const [open, setOpen] = useState(false);
+  1459→  const [webhook, setWebhook] = useState(() => (typeof window !== "undefined" ? localStorage.getItem(LS_MAKE_WEBHOOK) ?? "" : ""));
+  1460→  const [sending, setSending] = useState(false);
+  1461→  const [status, setStatus] = useState("");
+  1462→  const [scheduleMode, setScheduleMode] = useState<"now" | "later">("now");
+  1463→  const defaultWhen = useMemo(() => {
+  1464→    const d = new Date(Date.now() + 60 * 60 * 1000);
+  1465→    d.setMinutes(0, 0, 0);
+  1466→    const pad = (n: number) => n.toString().padStart(2, "0");
+  1467→    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  1468→  }, []);
+  1469→  const [when, setWhen] = useState(defaultWhen);
+  1470→
+  1471→  async function uploadToLitterbox(blob: Blob, filename: string) {
+  1472→    const up = new FormData();
+  1473→    up.append("reqtype", "fileupload");
+  1474→    up.append("time", "24h");
+  1475→    up.append("fileToUpload", blob, filename);
+  1476→    const r = await fetch("https://litterbox.catbox.moe/resources/internals/api.php", { method: "POST", body: up });
+  1477→    const url = (await r.text()).trim();
+  1478→    if (!r.ok || !url.startsWith("http")) throw new Error(`Falha ao hospedar ${filename}: ${url.slice(0, 200)}`);
+  1479→    return url;
+  1480→  }
+  1481→
+  1482→  async function publish() {
+  1483→    if (!webhook.startsWith("https://hook.")) {
+  1484→      toast.error("Cole a URL do webhook do Make (comeca com https://hook....)");
+  1485→      return;
+  1486→    }
+  1487→    let publishAtISO = "";
+  1488→    let privacy: "public" | "private" = "public";
+  1489→    if (scheduleMode === "later") {
+  1490→      const dt = new Date(when);
+  1491→      if (isNaN(dt.getTime()) || dt.getTime() < Date.now() + 10 * 60 * 1000) {
+  1492→        toast.error("Escolha uma data/hora pelo menos 10 minutos no futuro.");
+  1493→        return;
+  1494→      }
+  1495→      publishAtISO = dt.toISOString();
+  1496→      privacy = "private";
+  1497→    }
+  1498→
+  1499→    try {
+  1500→      setSending(true);
+  1501→      setStatus("Preparando video...");
+  1502→      localStorage.setItem(LS_MAKE_WEBHOOK, webhook);
+  1503→
+  1504→      toast.info("Hospedando video...");
+  1505→      const videoBlob = await (await fetch(videoUrl)).blob();
+  1506→      setStatus("Subindo MP4...");
+  1507→      const hostedVideoUrl = await uploadToLitterbox(videoBlob, "video-final.mp4");
+  1508→
+  1509→      let hostedThumbUrl = "";
+  1510→      if (thumbnail) {
+  1511→        setStatus("Subindo thumbnail...");
+  1512→        const thumbBlob = await (await fetch(thumbnail)).blob();
+  1513→        hostedThumbUrl = await uploadToLitterbox(thumbBlob, "thumbnail.jpg");
+  1514→      }
+  1515→
+  1516→      toast.info("Enviando ao Make...");
+  1517→      setStatus("Enviando campos ao Make...");
+  1518→      const makePayload = new FormData();
+  1519→      makePayload.append("title", (script.seoTitle || script.title).slice(0, 100));
+  1520→      makePayload.append("description",
+  1521→        (script.seoDescription || `${script.hook}\n\n${script.scenes.map((s) => s.narration).join("\n\n")}`).slice(0, 4900)
+  1522→      );
+  1523→      makePayload.append("tags", (script.tags?.length ? script.tags : ["darkcesar", "misterio", "terror"]).join(","));
+  1524→      makePayload.append("videoUrl", hostedVideoUrl);
+  1525→      makePayload.append("thumbnailUrl", hostedThumbUrl);
+  1526→      makePayload.append("privacyStatus", privacy);
+  1527→      makePayload.append("publishAt", publishAtISO);
+  1528→      await fetch(webhook, { method: "POST", mode: "no-cors", body: makePayload });
+  1529→      toast.success(
+  1530→        scheduleMode === "later"
+  1531→          ? `Agendado para ${new Date(when).toLocaleString("pt-BR")}`
+  1532→          : "Enviado para publicacao imediata!"
+  1533→      );
+  1534→      setOpen(false);
+  1535→    } catch (err: any) {
+  1536→      toast.error(err?.message ?? "Falha ao enviar ao Make", { duration: 9000 });
+  1537→    } finally {
+  1538→      setSending(false);
+  1539→      setStatus("");
+  1540→    }
+  1541→  }
+  1542→
+  1543→  if (!open) {
+  1544→    return (
+  1545→      <button onClick={() => setOpen(true)} className="inline-block rounded-md border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2 text-sm font-medium">
+  1546→        Publicar no YouTube (Make)
+  1547→      </button>
+  1548→    );
+  1549→  }
+  1550→
+  1551→  return (
+  1552→    <div className="w-full rounded-md border border-white/10 bg-white/5 p-3 space-y-3">
+  1553→      <label className="text-xs text-muted-foreground">URL do webhook do Make.com</label>
+  1554→      <input
+  1555→        type="url"
+  1556→        value={webhook}
+  1557→        onChange={(e) => setWebhook(e.target.value)}
+  1558→        placeholder="https://hook.eu2.make.com/abc123..."
+  1559→        className="w-full rounded-md bg-background border border-white/10 px-3 py-2 text-sm"
+  1560→      />
+  1561→
+  1562→      <div className="flex flex-wrap gap-2">
+  1563→        <button
+  1564→          type="button"
+  1565→          onClick={() => setScheduleMode("now")}
+  1566→          className={`rounded-full px-3 py-1 text-xs border transition ${scheduleMode === "now" ? "bg-primary/30 border-primary/60 text-primary" : "bg-white/5 border-white/10 hover:bg-white/10"}`}
+  1567→        >
+  1568→          Publicar agora
+  1569→        </button>
+  1570→        <button
+  1571→          type="button"
+  1572→          onClick={() => setScheduleMode("later")}
+  1573→          className={`rounded-full px-3 py-1 text-xs border transition ${scheduleMode === "later" ? "bg-accent/30 border-accent/60 text-accent" : "bg-white/5 border-white/10 hover:bg-white/10"}`}
+  1574→        >
+  1575→          Agendar
+  1576→        </button>
+  1577→      </div>
+  1578→
+  1579→      {scheduleMode === "later" && (
+  1580→        <div className="space-y-1 animate-fade-in">
+  1581→          <label className="text-xs text-muted-foreground">Data e hora (fuso local)</label>
+  1582→          <input
+  1583→            type="datetime-local"
+  1584→            value={when}
+  1585→            onChange={(e) => setWhen(e.target.value)}
+  1586→            min={defaultWhen}
+  1587→            className="w-full rounded-md bg-background border border-white/10 px-3 py-2 text-sm"
+  1588→          />
+  1589→        </div>
+  1590→      )}
+  1591→
+  1592→      <div className="flex flex-wrap gap-2">
+  1593→        <button onClick={publish} disabled={sending} className="rounded-md btn-blue-gradient px-4 py-2 text-sm font-medium disabled:opacity-50">
+  1594→          {sending ? "Enviando..." : scheduleMode === "later" ? "Agendar no YouTube" : "Publicar agora"}
+  1595→        </button>
+  1596→        <button onClick={() => setOpen(false)} className="rounded-md border border-white/20 px-4 py-2 text-sm">Cancelar</button>
+  1597→      </div>
+  1598→      {status && <p className="text-[11px] text-primary">{status}</p>}
+  1599→      <div className="text-[11px] text-muted-foreground space-y-1 leading-relaxed">
+  1600→        <p>
+  1601→          O Make recebe campos extras: <code>privacyStatus</code> (<i>public</i> ou <i>private</i>) e <code>publishAt</code> (ISO 8601, vazio = agora).
+  1602→        </p>
+  1603→        <p>
+  1604→          <b>Para agendamento funcionar</b>, no modulo <b>YouTube {"->"} Upload a Video</b> mapeie:
+  1605→          <br />- <b>Privacy Status</b> = <code>{`{{1.privacyStatus}}`}</code>
+  1606→          <br />- <b>Publish At</b> = <code>{`{{1.publishAt}}`}</code> (deixe vazio se for "agora")
+  1607→        </p>
+  1608→      </div>
+  1609→    </div>
+  1610→  );
+  1611→}
+  1612→
+  1613→/* ── Publish to TikTok ────────────────────────────────────────── */
+  1614→
+  1615→function PublishToTikTok({ videoUrl, script }: { videoUrl: string; script: Script }) {
+  1616→  const [open, setOpen] = useState(false);
+  1617→  const [sending, setSending] = useState(false);
+  1618→  const [status, setStatus] = useState("");
+  1619→  const [privacy, setPrivacy] = useState<"PUBLIC_TO_EVERYONE" | "FOLLOWERS_ONLY" | "PRIVATE">("PUBLIC_TO_EVERYONE");
+  1620→  const [connected, setConnected] = useState(() => !!localStorage.getItem("aidc.tiktok_access_token"));
+  1621→  const [title, setTitle] = useState(() => (script.seoTitle || script.title).slice(0, 150));
+  1622→
+  1623→  useEffect(() => {
+  1624→    // Listen for OAuth callback messages
+  1625→    function handleMessage(e: MessageEvent) {
+  1626→      if (e.data?.type === "tiktok-auth" && e.data.code) {
+  1627→        // Exchange code for token
+  1628→        fetch("/api/tiktok", {
+  1629→          method: "POST",
+  1630→          headers: { "Content-Type": "application/json" },
+  1631→          body: JSON.stringify({ action: "token", code: e.data.code }),
+  1632→        })
+  1633→          .then((r) => r.json())
+  1634→          .then((data) => {
+  1635→            if (data.accessToken) {
+  1636→              localStorage.setItem("aidc.tiktok_access_token", data.accessToken);
+  1637→              setConnected(true);
+  1638→              toast.success("TikTok conectado com sucesso!");
+  1639→            } else {
+  1640→              toast.error(`Erro TikTok: ${data.error}`);
+  1641→            }
+  1642→          })
+  1643→          .catch((err) => toast.error(`Erro: ${err.message}`));
+  1644→      }
+  1645→    }
+  1646→    window.addEventListener("message", handleMessage);
+  1647→    return () => window.removeEventListener("message", handleMessage);
+  1648→  }, []);
+  1649→
+  1650→  async function startOAuth() {
+  1651→    try {
+  1652→      const res = await fetch("/api/tiktok", {
+  1653→        method: "POST",
+  1654→        headers: { "Content-Type": "application/json" },
+  1655→        body: JSON.stringify({ action: "auth-url" }),
+  1656→      });
+  1657→      const data = await res.json();
+  1658→      if (data.authUrl) {
+  1659→        window.open(data.authUrl, "tiktok-auth", "width=600,height=700");
+  1660→        toast.info("Autorize o acesso na janela do TikTok...");
+  1661→      } else {
+  1662→        toast.error(data.error || "Erro ao iniciar OAuth");
+  1663→      }
+  1664→    } catch (err: any) {
+  1665→      toast.error(`Erro: ${err.message}`);
+  1666→    }
+  1667→  }
+  1668→
+  1669→  async function publish() {
+  1670→    const accessToken = localStorage.getItem("aidc.tiktok_access_token");
+  1671→    if (!accessToken) {
+  1672→      toast.error("Conecte sua conta TikTok primeiro.");
+  1673→      return;
+  1674→    }
+  1675→
+  1676→    setSending(true);
+  1677→    setStatus("Hospedando video temporariamente...");
+  1678→    try {
+  1679→      // Upload to litterbox for TikTok to pull
+  1680→      const videoBlob = await (await fetch(videoUrl)).blob();
+  1681→      const up = new FormData();
+  1682→      up.append("reqtype", "fileupload");
+  1683→      up.append("time", "24h");
+  1684→      up.append("fileToUpload", videoBlob, "tiktok-video.webm");
+  1685→      const upRes = await fetch("https://litterbox.catbox.moe/resources/internals/api.php", { method: "POST", body: up });
+  1686→      const hostedUrl = (await upRes.text()).trim();
+  1687→      if (!upRes.ok || !hostedUrl.startsWith("http")) throw new Error("Falha ao hospedar video");
+  1688→
+  1689→      setStatus("Enviando ao TikTok...");
+  1690→      const res = await fetch("/api/tiktok", {
+  1691→        method: "POST",
+  1692→        headers: { "Content-Type": "application/json" },
+  1693→        body: JSON.stringify({
+  1694→          action: "publish",
+  1695→          videoUrl: hostedUrl,
+  1696→          title: title.slice(0, 150),
+  1697→          privacyLevel: privacy,
+  1698→          accessToken,
+  1699→        }),
+  1700→      });
+  1701→      const data = await res.json();
+  1702→      if (data.ok) {
+  1703→        toast.success("Video enviado ao TikTok! Pode levar alguns minutos para aparecer.");
+  1704→        setOpen(false);
+  1705→      } else {
+  1706→        toast.error(data.error || "Erro ao publicar no TikTok", { duration: 9000 });
+  1707→      }
+  1708→    } catch (err: any) {
+  1709→      toast.error(err?.message ?? "Falha ao publicar no TikTok", { duration: 9000 });
+  1710→    } finally {
+  1711→      setSending(false);
+  1712→      setStatus("");
+  1713→    }
+  1714→  }
+  1715→
+  1716→  if (!open) {
+  1717→    return (
+  1718→      <button
+  1719→        onClick={() => setOpen(true)}
+  1720→        className="inline-block rounded-md border border-[#00f2ea]/30 bg-[#00f2ea]/10 hover:bg-[#00f2ea]/20 px-4 py-2 text-sm font-medium text-[#00f2ea]"
+  1721→      >
+  1722→        Publicar no TikTok
+  1723→      </button>
+  1724→    );
+  1725→  }
+  1726→
+  1727→  return (
+  1728→    <div className="w-full rounded-md border border-[#00f2ea]/20 bg-[#00f2ea]/5 p-3 space-y-3">
+  1729→      <div className="flex items-center gap-2">
+  1730→        <Smartphone className="w-4 h-4 text-[#00f2ea]" />
+  1731→        <span className="text-sm font-bold text-[#00f2ea]">Publicar no TikTok</span>
+  1732→      </div>
+  1733→
+  1734→      {!connected ? (
+  1735→        <div className="space-y-3">
+  1736→          <p className="text-xs text-muted-foreground">
+  1737→            Conecte sua conta TikTok para publicar videos diretamente. Voce sera redirecionado para autorizar o acesso.
+  1738→          </p>
+  1739→          <button
+  1740→            onClick={startOAuth}
+  1741→            className="w-full rounded-md bg-[#00f2ea] text-black font-semibold px-4 py-2.5 text-sm hover:bg-[#00f2ea]/90 transition"
+  1742→          >
+  1743→            Conectar conta TikTok
+  1744→          </button>
+  1745→        </div>
+  1746→      ) : (
+  1747→        <>
+  1748→          <div className="flex items-center gap-2">
+  1749→            <span className="w-2 h-2 rounded-full bg-green-400" />
+  1750→            <span className="text-xs text-green-400">Conta conectada</span>
+  1751→          </div>
+  1752→
+  1753→          <div className="space-y-1.5">
+  1754→            <label className="text-xs text-muted-foreground">Titulo do video (max 150 chars)</label>
+  1755→            <input
+  1756→              type="text"
+  1757→              value={title}
+  1758→              onChange={(e) => setTitle(e.target.value.slice(0, 150))}
+  1759→              className="w-full rounded-md bg-background border border-white/10 px-3 py-2 text-sm"
+  1760→              maxLength={150}
+  1761→            />
+  1762→            <div className="text-[10px] text-muted-foreground text-right">{title.length}/150</div>
+  1763→          </div>
+  1764→
+  1765→          <div className="space-y-1.5">
+  1766→            <label className="text-xs text-muted-foreground">Privacidade</label>
+  1767→            <div className="flex flex-wrap gap-2">
+  1768→              {([
+  1769→                { id: "PUBLIC_TO_EVERYONE" as const, label: "Publico" },
+  1770→                { id: "FOLLOWERS_ONLY" as const, label: "Seguidores" },
+  1771→                { id: "PRIVATE" as const, label: "Privado" },
+  1772→              ]).map((opt) => (
+  1773→                <button
+  1774→                  key={opt.id}
+  1775→                  type="button"
+  1776→                  onClick={() => setPrivacy(opt.id)}
+  1777→                  className={`rounded-full px-3 py-1 text-xs border transition ${
+  1778→                    privacy === opt.id
+  1779→                      ? "border-[#00f2ea]/60 bg-[#00f2ea]/20 text-[#00f2ea]"
+  1780→                      : "border-white/10 bg-white/5 hover:bg-white/10"
+  1781→                  }`}
+  1782→                >
+  1783→                  {opt.label}
+  1784→                </button>
+  1785→              ))}
+  1786→            </div>
+  1787→          </div>
+  1788→
+  1789→          <div className="flex flex-wrap gap-2">
+  1790→            <button onClick={publish} disabled={sending} className="rounded-md bg-[#00f2ea] text-black font-semibold px-4 py-2 text-sm hover:bg-[#00f2ea]/90 transition disabled:opacity-50">
+  1791→              {sending ? "Enviando..." : "Publicar no TikTok"}
+  1792→            </button>
+  1793→            <button onClick={() => setOpen(false)} className="rounded-md border border-white/20 px-4 py-2 text-sm">Cancelar</button>
+  1794→          </div>
+  1795→          {status && <p className="text-[11px] text-[#00f2ea]">{status}</p>}
+  1796→          <p className="text-[10px] text-muted-foreground">
+  1797→            O video e hospedado temporariamente (24h) e o TikTok o baixa automaticamente. Tags e hashtags sao incluidas no titulo.
+  1798→          </p>
+  1799→        </>
+  1800→      )}
+  1801→    </div>
+  1802→  );
+  1803→}
