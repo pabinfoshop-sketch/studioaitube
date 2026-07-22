@@ -1,0 +1,743 @@
+     1→     1→/**
+     2→     2→ * TikTok AI Effects Module
+     3→     3→ * Visual effects, audio effects, transitions, and caption rendering
+     4→     4→ * for the StudioAITube video assembler.
+     5→     5→ */
+     6→     6→
+     7→     7→import type { CaptionSegment } from "@/lib/ai-client";
+     8→     8→
+     9→     9→// ── Visual Effect Types ──
+    10→    10→
+    11→    11→export type VisualEffect = "none" | "glitch" | "vhs" | "paranormal" | "noir" | "red-tint" | "film-grain" | "shadow-pulse";
+    12→    12→
+    13→    13→export const VISUAL_EFFECTS: { id: VisualEffect; label: string; desc: string; emoji: string }[] = [
+    14→    14→  { id: "none", label: "Sem efeito", desc: "Visual limpo padrão", emoji: "🎞️" },
+    15→    15→  { id: "glitch", label: "Glitch Digital", desc: "Distorção digital aleatória", emoji: "📺" },
+    16→    16→  { id: "vhs", label: "VHS Retro", desc: "Estética VHS anos 80/90", emoji: "📼" },
+    17→    17→  { id: "paranormal", label: "Paranormal", desc: "Tremor e distorção sobrenatural", emoji: "👻" },
+    18→    18→  { id: "noir", label: "Noir Escuro", desc: "Preto e branco contrastado", emoji: "🌑" },
+    19→    19→  { id: "red-tint", label: "Vermelho Sombrio", desc: "Tonalidade vermelha intensa", emoji: "🩸" },
+    20→    20→  { id: "film-grain", label: "Grão de Filme", desc: "Textura de filme analógico", emoji: "🎞️" },
+    21→    21→  { id: "shadow-pulse", label: "Pulso de Sombra", desc: "Pulsação de escuridão rítmica", emoji: "👁️" },
+    22→    22→];
+    23→    23→
+    24→    24→export type TransitionEffect = "none" | "fade" | "glitch-cut" | "flash" | "distortion" | "whisper";
+    25→    25→
+    26→    26→export const TRANSITION_EFFECTS: { id: TransitionEffect; label: string; desc: string; emoji: string }[] = [
+    27→    27→  { id: "none", label: "Corte seco", desc: "Sem transição", emoji: "✂️" },
+    28→    28→  { id: "fade", label: "Fade", desc: "Esmaecimento suave", emoji: "🌑" },
+    29→    29→  { id: "glitch-cut", label: "Glitch Cut", desc: "Corte com glitch", emoji: "📺" },
+    30→    30→  { id: "flash", label: "Flash Branco", desc: "Flash de luz rápida", emoji: "⚡" },
+    31→    31→  { id: "distortion", label: "Distortion", desc: "Distorção de onda", emoji: "🌊" },
+    32→    32→  { id: "whisper", label: "Whisper", desc: "Desfocagem + aparecimento", emoji: "💨" },
+    33→    33→];
+    34→    34→
+    35→    35→export type VoiceEffect = "none" | "echo" | "reverb" | "deep" | "whisper-voice" | "radio";
+    36→    36→
+    37→    37→export const VOICE_EFFECTS: { id: VoiceEffect; label: string; desc: string; emoji: string }[] = [
+    38→    38→  { id: "none", label: "Sem efeito", desc: "Voz natural", emoji: "🎙️" },
+    39→    39→  { id: "echo", label: "Eco Sombrio", desc: "Eco com decay longo", emoji: "📢" },
+    40→    40→  { id: "reverb", label: "Reverb", desc: "Reverberação de caverna", emoji: "🕳️" },
+    41→    41→  { id: "deep", label: "Mais Grave", desc: "Pitch down assustador", emoji: "👹" },
+    42→    42→  { id: "whisper-voice", label: "Sussurro", desc: "Voz sussurrada fantasmagórica", emoji: "👻" },
+    43→    43→  { id: "radio", label: "Rádio Antigo", desc: "Efeito de rádio estático", emoji: "📻" },
+    44→    44→];
+    45→    45→
+    46→    46→export type CaptionStyle = "none" | "tiktok" | "cinematic" | "karaoke" | "glitch-text";
+    47→    47→
+    48→    48→export const CAPTION_STYLES: { id: CaptionStyle; label: string; desc: string; emoji: string }[] = [
+    49→    49→  { id: "none", label: "Sem legenda", desc: "Não mostrar legendas", emoji: "🚫" },
+    50→    50→  { id: "tiktok", label: "TikTok Style", desc: "Fundo preto + texto branco bold", emoji: "🎵" },
+    51→    51→  { id: "cinematic", label: "Cinematográfico", desc: "Texto branco com sombra sutil", emoji: "🎬" },
+    52→    52→  { id: "karaoke", label: "Karaokê", desc: "Palavra atual destacada em cor", emoji: "🎤" },
+    53→    53→  { id: "glitch-text", label: "Glitch Texto", desc: "Texto com efeito glitch", emoji: "📺" },
+    54→    54→];
+    55→    55→
+    56→    56→export type MusicMood = "dark-suspense" | "horror-ambient" | "true-crime" | "paranormal" | "occult-ritual" | "deep-mystery";
+    57→    57→
+    58→    58→export const MUSIC_MOODS: { id: MusicMood; label: string; prompt: string; emoji: string }[] = [
+    59→    59→  { id: "dark-suspense", label: "Suspense Sombrio", prompt: "dark suspenseful cinematic background music, tension building, eerie atmosphere", emoji: "🌑" },
+    60→    60→  { id: "horror-ambient", label: "Horror Ambiente", prompt: "dark horror ambient soundscape, creepy atmosphere, unsettling drones, dissonant strings", emoji: "👻" },
+    61→    61→  { id: "true-crime", label: "True Crime", prompt: "true crime investigation music, mysterious piano, dark orchestral, documentary style", emoji: "🔍" },
+    62→    62→  { id: "paranormal", label: "Paranormal", prompt: "paranormal supernatural music, ghostly whispers, ethereal pads, otherworldly atmosphere", emoji: "👁️" },
+    63→    63→  { id: "occult-ritual", label: "Oculto/Ritual", prompt: "dark occult ritual music, deep drums, chanting ambient, dark meditation, ominous", emoji: "🕯️" },
+    64→    64→  { id: "deep-mystery", label: "Mistério Profundo", prompt: "deep mystery music, slow orchestral build, dark strings, enigmatic atmosphere", emoji: "🧩" },
+    65→    65→];
+    66→    66→
+    67→    67→// ── TikTok AI Options ──
+    68→    68→
+    69→    69→export type TikTokAIOptions = {
+    70→    70→  captions: {
+    71→    71→    enabled: boolean;
+    72→    72→    style: CaptionStyle;
+    73→    73→    segments: CaptionSegment[];
+    74→    74→  };
+    75→    75→  music: {
+    76→    76→    enabled: boolean;
+    77→    77→    audioUrl: string | null;
+    78→    78→    volume: number; // 0..1
+    79→    79→    mood: MusicMood;
+    80→    80→  };
+    81→    81→  visualEffect: VisualEffect;
+    82→    82→  voiceEffect: VoiceEffect;
+    83→    83→  transition: TransitionEffect;
+    84→    84→};
+    85→    85→
+    86→    86→export const DEFAULT_TIKTOK_AI: TikTokAIOptions = {
+    87→    87→  captions: { enabled: false, style: "tiktok", segments: [] },
+    88→    88→  music: { enabled: false, audioUrl: null, volume: 0.15, mood: "dark-suspense" },
+    89→    89→  visualEffect: "none",
+    90→    90→  voiceEffect: "none",
+    91→    91→  transition: "none",
+    92→    92→};
+    93→    93→
+    94→    94→// ── Visual Effect Renderers ──
+    95→    95→
+    96→    96→/** Apply a visual effect overlay on the canvas after the main image is drawn */
+    97→    97→export function applyVisualEffect(
+    98→    98→  ctx: CanvasRenderingContext2D,
+    99→    99→  W: number,
+   100→   100→  H: number,
+   101→   101→  t: number, // 0..1 scene progress
+   102→   102→  frame: number,
+   103→   103→  effect: VisualEffect,
+   104→   104→) {
+   105→   105→  if (effect === "none") return;
+   106→   106→
+   107→   107→  switch (effect) {
+   108→   108→    case "glitch":
+   109→   109→      renderGlitch(ctx, W, H, t, frame);
+   110→   110→      break;
+   111→   111→    case "vhs":
+   112→   112→      renderVHS(ctx, W, H, t, frame);
+   113→   113→      break;
+   114→   114→    case "paranormal":
+   115→   115→      renderParanormal(ctx, W, H, t, frame);
+   116→   116→      break;
+   117→   117→    case "noir":
+   118→   118→      renderNoir(ctx, W, H);
+   119→   119→      break;
+   120→   120→    case "red-tint":
+   121→   121→      renderRedTint(ctx, W, H, t);
+   122→   122→      break;
+   123→   123→    case "film-grain":
+   124→   124→      renderFilmGrain(ctx, W, H, frame);
+   125→   125→      break;
+   126→   126→    case "shadow-pulse":
+   127→   127→      renderShadowPulse(ctx, W, H, t);
+   128→   128→      break;
+   129→   129→  }
+   130→   130→}
+   131→   131→
+   132→   132→function renderGlitch(ctx: CanvasRenderingContext2D, W: number, H: number, t: number, frame: number) {
+   133→   133→  // Random glitch bars
+   134→   134→  const glitchIntensity = Math.random() > 0.85 ? 0.8 : 0.15;
+   135→   135→  const numBars = Math.floor(Math.random() * 8 * glitchIntensity) + 1;
+   136→   136→  for (let i = 0; i < numBars; i++) {
+   137→   137→    const y = Math.random() * H;
+   138→   138→    const barH = Math.random() * 20 + 2;
+   139→   139→    const offset = (Math.random() - 0.5) * 40 * glitchIntensity;
+   140→   140→    try {
+   141→   141→      const imgData = ctx.getImageData(0, Math.max(0, Math.floor(y)), W, Math.min(Math.ceil(barH), Math.floor(H - y)));
+   142→   142→      ctx.putImageData(imgData, offset, Math.floor(y));
+   143→   143→    } catch { /* cross-origin safety */ }
+   144→   144→  }
+   145→   145→  // RGB shift
+   146→   146→  if (Math.random() > 0.7) {
+   147→   147→    ctx.globalCompositeOperation = "screen";
+   148→   148→    ctx.fillStyle = `rgba(255, 0, 0, ${0.03 * glitchIntensity})`;
+   149→   149→    ctx.fillRect(2, 0, W, H);
+   150→   150→    ctx.fillStyle = `rgba(0, 255, 255, ${0.03 * glitchIntensity})`;
+   151→   151→    ctx.fillRect(-2, 0, W, H);
+   152→   152→    ctx.globalCompositeOperation = "source-over";
+   153→   153→  }
+   154→   154→  // Scanline
+   155→   155→  ctx.fillStyle = `rgba(0,0,0,${0.03 + Math.random() * 0.02})`;
+   156→   156→  for (let y = 0; y < H; y += 3) {
+   157→   157→    ctx.fillRect(0, y, W, 1);
+   158→   158→  }
+   159→   159→}
+   160→   160→
+   161→   161→function renderVHS(ctx: CanvasRenderingContext2D, W: number, H: number, t: number, frame: number) {
+   162→   162→  // Tracking lines
+   163→   163→  const trackingY = ((frame * 0.3) % (H + 40)) - 20;
+   164→   164→  ctx.fillStyle = "rgba(255,255,255,0.06)";
+   165→   165→  ctx.fillRect(0, trackingY, W, 3);
+   166→   166→  ctx.fillStyle = "rgba(255,255,255,0.03)";
+   167→   167→  ctx.fillRect(0, trackingY + 6, W, 8);
+   168→   168→
+   169→   169→  // Bottom tracking noise
+   170→   170→  if (Math.random() > 0.9) {
+   171→   171→    const noiseH = Math.random() * 30 + 5;
+   172→   172→    ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.08})`;
+   173→   173→    ctx.fillRect(0, H - noiseH, W, noiseH);
+   174→   174→  }
+   175→   175→
+   176→   176→  // Color bleed
+   177→   177→  ctx.globalCompositeOperation = "screen";
+   178→   178→  ctx.fillStyle = "rgba(255, 0, 80, 0.04)";
+   179→   179→  ctx.fillRect(1, 0, W, H);
+   180→   180→  ctx.fillStyle = "rgba(0, 80, 255, 0.03)";
+   181→   181→  ctx.fillRect(-1, 0, W, H);
+   182→   182→  ctx.globalCompositeOperation = "source-over";
+   183→   183→
+   184→   184→  // Scanlines
+   185→   185→  ctx.fillStyle = "rgba(0,0,0,0.08)";
+   186→   186→  for (let y = 0; y < H; y += 2) {
+   187→   187→    ctx.fillRect(0, y, W, 1);
+   188→   188→  }
+   189→   189→
+   190→   190→  // Vignette heavy
+   191→   191→  const grad = ctx.createRadialGradient(W / 2, H / 2, W * 0.2, W / 2, H / 2, W * 0.7);
+   192→   192→  grad.addColorStop(0, "rgba(0,0,0,0)");
+   193→   193→  grad.addColorStop(1, "rgba(0,0,0,0.5)");
+   194→   194→  ctx.fillStyle = grad;
+   195→   195→  ctx.fillRect(0, 0, W, H);
+   196→   196→
+   197→   197→  // Date stamp
+   198→   198→  ctx.font = "14px monospace";
+   199→   199→  ctx.fillStyle = "rgba(255,255,255,0.5)";
+   200→   200→  const d = new Date(2024, 10, 13 + Math.floor(Math.random() * 3));
+   201→   201→  ctx.fillText(`REC ${d.toLocaleDateString("pt-BR")}`, 20, H - 20);
+   202→   202→}
+   203→   203→
+   204→   204→function renderParanormal(ctx: CanvasRenderingContext2D, W: number, H: number, t: number, frame: number) {
+   205→   205→  // Shaking
+   206→   206→  const shakeX = (Math.random() - 0.5) * 4 * (Math.sin(t * Math.PI * 8) * 0.5 + 0.5);
+   207→   207→  const shakeY = (Math.random() - 0.5) * 3 * (Math.sin(t * Math.PI * 6) * 0.5 + 0.5);
+   208→   208→  try {
+   209→   209→    const imgData = ctx.getImageData(0, 0, W, H);
+   210→   210→    ctx.putImageData(imgData, shakeX, shakeY);
+   211→   211→  } catch { /* cross-origin */ }
+   212→   212→
+   213→   213→  // Flickering brightness
+   214→   214→  const flicker = 0.7 + Math.random() * 0.3;
+   215→   215→  ctx.fillStyle = `rgba(0,0,0,${1 - flicker})`;
+   216→   216→  ctx.fillRect(0, 0, W, H);
+   217→   217→
+   218→   218→  // Eerie blue tint
+   219→   219→  ctx.globalCompositeOperation = "overlay";
+   220→   220→  ctx.fillStyle = "rgba(50, 0, 80, 0.08)";
+   221→   221→  ctx.fillRect(0, 0, W, H);
+   222→   222→  ctx.globalCompositeOperation = "source-over";
+   223→   223→
+   224→   224→  // Random apparition flash
+   225→   225→  if (Math.random() > 0.97) {
+   226→   226→    ctx.fillStyle = `rgba(200,200,255,${Math.random() * 0.1})`;
+   227→   227→    ctx.fillRect(0, 0, W, H);
+   228→   228→  }
+   229→   229→}
+   230→   230→
+   231→   231→function renderNoir(ctx: CanvasRenderingContext2D, W: number, H: number) {
+   232→   232→  // Desaturate by overlaying semi-transparent grayscale
+   233→   233→  ctx.globalCompositeOperation = "saturation";
+   234→   234→  ctx.fillStyle = "rgba(128,128,128,1)";
+   235→   235→  ctx.fillRect(0, 0, W, H);
+   236→   236→  ctx.globalCompositeOperation = "source-over";
+   237→   237→
+   238→   238→  // High contrast
+   239→   239→  ctx.globalCompositeOperation = "overlay";
+   240→   240→  ctx.fillStyle = "rgba(0,0,0,0.2)";
+   241→   241→  ctx.fillRect(0, 0, W, H);
+   242→   242→  ctx.globalCompositeOperation = "source-over";
+   243→   243→
+   244→   244→  // Vignette
+   245→   245→  const grad = ctx.createRadialGradient(W / 2, H / 2, W * 0.15, W / 2, H / 2, W * 0.65);
+   246→   246→  grad.addColorStop(0, "rgba(0,0,0,0)");
+   247→   247→  grad.addColorStop(1, "rgba(0,0,0,0.7)");
+   248→   248→  ctx.fillStyle = grad;
+   249→   249→  ctx.fillRect(0, 0, W, H);
+   250→   250→}
+   251→   251→
+   252→   252→function renderRedTint(ctx: CanvasRenderingContext2D, W: number, H: number, t: number) {
+   253→   253→  // Pulsating red overlay
+   254→   254→  const pulse = 0.1 + Math.sin(t * Math.PI * 4) * 0.05;
+   255→   255→  ctx.globalCompositeOperation = "multiply";
+   256→   256→  ctx.fillStyle = `rgba(180, 40, 40, ${pulse})`;
+   257→   257→  ctx.fillRect(0, 0, W, H);
+   258→   258→  ctx.globalCompositeOperation = "source-over";
+   259→   259→
+   260→   260→  // Red vignette
+   261→   261→  const grad = ctx.createRadialGradient(W / 2, H / 2, W * 0.2, W / 2, H / 2, W * 0.7);
+   262→   262→  grad.addColorStop(0, "rgba(0,0,0,0)");
+   263→   263→  grad.addColorStop(1, "rgba(100,0,0,0.4)");
+   264→   264→  ctx.fillStyle = grad;
+   265→   265→  ctx.fillRect(0, 0, W, H);
+   266→   266→}
+   267→   267→
+   268→   268→function renderFilmGrain(ctx: CanvasRenderingContext2D, W: number, H: number, frame: number) {
+   269→   269→  // Static grain
+   270→   270→  const imgData = ctx.getImageData(0, 0, W, H);
+   271→   271→  const data = imgData.data;
+   272→   272→  const grainAmount = 15;
+   273→   273→  // Only process every other pixel for performance
+   274→   274→  for (let i = 0; i < data.length; i += 8) {
+   275→   275→    const grain = (Math.random() - 0.5) * grainAmount;
+   276→   276→    data[i] = Math.min(255, Math.max(0, data[i] + grain));
+   277→   277→    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + grain));
+   278→   278→    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + grain));
+   279→   279→  }
+   280→   280→  ctx.putImageData(imgData, 0, 0);
+   281→   281→}
+   282→   282→
+   283→   283→function renderShadowPulse(ctx: CanvasRenderingContext2D, W: number, H: number, t: number) {
+   284→   284→  const pulse = Math.sin(t * Math.PI * 6) * 0.5 + 0.5;
+   285→   285→  ctx.fillStyle = `rgba(0, 0, 0, ${pulse * 0.25})`;
+   286→   286→  ctx.fillRect(0, 0, W, H);
+   287→   287→
+   288→   288→  // Edge shadows that pulse
+   289→   289→  const edgeSize = 80 + pulse * 40;
+   290→   290→  // Top
+   291→   291→  const gt = ctx.createLinearGradient(0, 0, 0, edgeSize);
+   292→   292→  gt.addColorStop(0, `rgba(0,0,0,${0.3 + pulse * 0.2})`);
+   293→   293→  gt.addColorStop(1, "rgba(0,0,0,0)");
+   294→   294→  ctx.fillStyle = gt;
+   295→   295→  ctx.fillRect(0, 0, W, edgeSize);
+   296→   296→  // Bottom
+   297→   297→  const gb = ctx.createLinearGradient(0, H, 0, H - edgeSize);
+   298→   298→  gb.addColorStop(0, `rgba(0,0,0,${0.3 + pulse * 0.2})`);
+   299→   299→  gb.addColorStop(1, "rgba(0,0,0,0)");
+   300→   300→  ctx.fillStyle = gb;
+   301→   301→  ctx.fillRect(0, H - edgeSize, W, edgeSize);
+   302→   302→}
+   303→   303→
+   304→   304→// ── Caption Renderers ──
+   305→   305→
+   306→   306→export function renderCaption(
+   307→   307→  ctx: CanvasRenderingContext2D,
+   308→   308→  W: number,
+   309→   309→  H: number,
+   310→   310→  currentTime: number, // seconds into the scene
+   311→   311→  segments: CaptionSegment[],
+   312→   312→  style: CaptionStyle,
+   313→   313→  frame: number,
+   314→   314→) {
+   315→   315→  if (style === "none" || !segments.length) return;
+   316→   316→
+   317→   317→  // Find active segment
+   318→   318→  let activeSeg: CaptionSegment | null = null;
+   319→   319→  let segProgress = 0;
+   320→   320→  for (const seg of segments) {
+   321→   321→    if (currentTime >= seg.start && currentTime <= seg.end) {
+   322→   322→      activeSeg = seg;
+   323→   323→      segProgress = (currentTime - seg.start) / (seg.end - seg.start || 1);
+   324→   324→      break;
+   325→   325→    }
+   326→   326→  }
+   327→   327→  if (!activeSeg) return;
+   328→   328→
+   329→   329→  const text = activeSeg.text.trim();
+   330→   330→  if (!text) return;
+   331→   331→
+   332→   332→  switch (style) {
+   333→   333→    case "tiktok":
+   334→   334→      renderTikTokCaption(ctx, W, H, text);
+   335→   335→      break;
+   336→   336→    case "cinematic":
+   337→   337→      renderCinematicCaption(ctx, W, H, text);
+   338→   338→      break;
+   339→   339→    case "karaoke":
+   340→   340→      renderKaraokeCaption(ctx, W, H, text, segProgress, activeSeg, currentTime);
+   341→   341→      break;
+   342→   342→    case "glitch-text":
+   343→   343→      renderGlitchCaption(ctx, W, H, text, frame);
+   344→   344→      break;
+   345→   345→  }
+   346→   346→}
+   347→   347→
+   348→   348→function renderTikTokCaption(ctx: CanvasRenderingContext2D, W: number, H: number, text: string) {
+   349→   349→  const fontSize = Math.min(32, W * 0.035);
+   350→   350→  ctx.font = `bold ${fontSize}px 'Arial Black', 'Impact', sans-serif`;
+   351→   351→  ctx.textAlign = "center";
+   352→   352→  ctx.textBaseline = "middle";
+   353→   353→
+   354→   354→  const lines = wrapText(ctx, text, W * 0.85);
+   355→   355→  const lineHeight = fontSize * 1.4;
+   356→   356→  const totalH = lines.length * lineHeight;
+   357→   357→  const startY = H * 0.82 - totalH / 2;
+   358→   358→
+   359→   359→  for (let i = 0; i < lines.length; i++) {
+   360→   360→    const y = startY + i * lineHeight + lineHeight / 2;
+   361→   361→    const metrics = ctx.measureText(lines[i]);
+   362→   362→    const tw = metrics.width;
+   363→   363→    const px = 16;
+   364→   364→    const py = 6;
+   365→   365→
+   366→   366→    // Black rounded background
+   367→   367→    const rx = W / 2 - tw / 2 - px;
+   368→   368→    const ry = y - fontSize / 2 - py;
+   369→   369→    const rw = tw + px * 2;
+   370→   370→    const rh = fontSize + py * 2;
+   371→   371→    const radius = 8;
+   372→   372→    ctx.fillStyle = "rgba(0,0,0,0.85)";
+   373→   373→    roundRect(ctx, rx, ry, rw, rh, radius);
+   374→   374→    ctx.fill();
+   375→   375→
+   376→   376→    // White text
+   377→   377→    ctx.fillStyle = "#FFFFFF";
+   378→   378→    ctx.fillText(lines[i], W / 2, y);
+   379→   379→  }
+   380→   380→}
+   381→   381→
+   382→   382→function renderCinematicCaption(ctx: CanvasRenderingContext2D, W: number, H: number, text: string) {
+   383→   383→  const fontSize = Math.min(26, W * 0.028);
+   384→   384→  ctx.font = `${fontSize}px 'Georgia', 'Times New Roman', serif`;
+   385→   385→  ctx.textAlign = "center";
+   386→   386→  ctx.textBaseline = "middle";
+   387→   387→
+   388→   388→  const lines = wrapText(ctx, text, W * 0.8);
+   389→   389→  const lineHeight = fontSize * 1.5;
+   390→   390→  const totalH = lines.length * lineHeight;
+   391→   391→  const startY = H * 0.85 - totalH / 2;
+   392→   392→
+   393→   393→  for (let i = 0; i < lines.length; i++) {
+   394→   394→    const y = startY + i * lineHeight + lineHeight / 2;
+   395→   395→
+   396→   396→    // Shadow
+   397→   397→    ctx.shadowColor = "rgba(0,0,0,0.8)";
+   398→   398→    ctx.shadowBlur = 6;
+   399→   399→    ctx.shadowOffsetX = 1;
+   400→   400→    ctx.shadowOffsetY = 1;
+   401→   401→
+   402→   402→    ctx.fillStyle = "#FFFFFF";
+   403→   403→    ctx.fillText(lines[i], W / 2, y);
+   404→   404→
+   405→   405→    // Reset shadow
+   406→   406→    ctx.shadowColor = "transparent";
+   407→   407→    ctx.shadowBlur = 0;
+   408→   408→    ctx.shadowOffsetX = 0;
+   409→   409→    ctx.shadowOffsetY = 0;
+   410→   410→  }
+   411→   411→}
+   412→   412→
+   413→   413→function renderKaraokeCaption(
+   414→   414→  ctx: CanvasRenderingContext2D,
+   415→   415→  W: number,
+   416→   416→  H: number,
+   417→   417→  text: string,
+   418→   418→  progress: number,
+   419→   419→  seg: CaptionSegment,
+   420→   420→  currentTime: number,
+   421→   421→) {
+   422→   422→  const fontSize = Math.min(30, W * 0.032);
+   423→   423→  ctx.font = `bold ${fontSize}px 'Arial', sans-serif`;
+   424→   424→  ctx.textAlign = "center";
+   425→   425→  ctx.textBaseline = "middle";
+   426→   426→
+   427→   427→  const y = H * 0.82;
+   428→   428→  const words = text.split(" ");
+   429→   429→
+   430→   430→  // Calculate which words are "spoken" based on word-level timing or progress
+   431→   431→  const wordsSpoken = Math.floor(progress * words.length);
+   432→   432→  const fullText = words.join(" ");
+   433→   433→  const spokenText = words.slice(0, wordsSpoken + 1).join(" ");
+   434→   434→
+   435→   435→  // Draw all words in dim white
+   436→   436→  ctx.fillStyle = "rgba(255,255,255,0.4)";
+   437→   437→  ctx.fillText(fullText, W / 2, y);
+   438→   438→
+   439→   439→  // Draw spoken words in bright primary color on top
+   440→   440→  ctx.fillStyle = "#a78bfa"; // primary purple
+   441→   441→  // Measure the spoken portion width
+   442→   442→  const fullWidth = ctx.measureText(fullText).width;
+   443→   443→  const spokenWidth = ctx.measureText(spokenText).width;
+   444→   444→  const startX = W / 2 - fullWidth / 2;
+   445→   445→
+   446→   446→  // Use clipping to highlight only the spoken portion
+   447→   447→  ctx.save();
+   448→   448→  ctx.beginPath();
+   449→   449→  ctx.rect(startX, y - fontSize, spokenWidth, fontSize * 2);
+   450→   450→  ctx.clip();
+   451→   451→  ctx.fillStyle = "#a78bfa";
+   452→   452→  ctx.fillText(fullText, W / 2, y);
+   453→   453→  ctx.restore();
+   454→   454→
+   455→   455→  // Background bar
+   456→   456→  ctx.fillStyle = "rgba(0,0,0,0.6)";
+   457→   457→  const barW = fullWidth + 40;
+   458→   458→  roundRect(ctx, W / 2 - barW / 2, y - fontSize / 2 - 8, barW, fontSize + 16, 10);
+   459→   459→  ctx.fill();
+   460→   460→
+   461→   461→  // Re-draw text on top of background
+   462→   462→  ctx.fillStyle = "rgba(255,255,255,0.4)";
+   463→   463→  ctx.fillText(fullText, W / 2, y);
+   464→   464→  ctx.save();
+   465→   465→  ctx.beginPath();
+   466→   466→  ctx.rect(startX, y - fontSize, spokenWidth, fontSize * 2);
+   467→   467→  ctx.clip();
+   468→   468→  ctx.fillStyle = "#FFFFFF";
+   469→   469→  ctx.fillText(fullText, W / 2, y);
+   470→   470→  ctx.restore();
+   471→   471→}
+   472→   472→
+   473→   473→function renderGlitchCaption(ctx: CanvasRenderingContext2D, W: number, H: number, text: string, frame: number) {
+   474→   474→  const fontSize = Math.min(30, W * 0.032);
+   475→   475→  ctx.font = `bold ${fontSize}px 'Courier New', monospace`;
+   476→   476→  ctx.textAlign = "center";
+   477→   477→  ctx.textBaseline = "middle";
+   478→   478→
+   479→   479→  const y = H * 0.82;
+   480→   480→  const glitchOffset = (Math.random() - 0.5) * 6;
+   481→   481→
+   482→   482→  // Red channel offset
+   483→   483→  ctx.fillStyle = "rgba(255,0,0,0.7)";
+   484→   484→  ctx.fillText(text, W / 2 + glitchOffset - 2, y - 1);
+   485→   485→
+   486→   486→  // Cyan channel offset
+   487→   487→  ctx.fillStyle = "rgba(0,255,255,0.7)";
+   488→   488→  ctx.fillText(text, W / 2 + glitchOffset + 2, y + 1);
+   489→   489→
+   490→   490→  // Main white text
+   491→   491→  ctx.fillStyle = "#FFFFFF";
+   492→   492→  ctx.fillText(text, W / 2 + glitchOffset, y);
+   493→   493→
+   494→   494→  // Random glitch bar through text
+   495→   495→  if (Math.random() > 0.7) {
+   496→   496→    ctx.fillStyle = "rgba(255,255,255,0.1)";
+   497→   497→    ctx.fillRect(0, y - fontSize / 2 + Math.random() * fontSize, W, 2);
+   498→   498→  }
+   499→   499→}
+   500→   500→
+   501→   501→// ── Audio Effect Processors (Web Audio API) ──
+   502→   502→
+   503→   503→export function applyVoiceEffect(
+   504→   504→  audioCtx: AudioContext,
+   505→   505→  sourceNode: AudioNode,
+   506→   506→  effect: VoiceEffect,
+   507→   507→): { chain: AudioNode; destination: AudioNode } {
+   508→   508→  if (effect === "none") {
+   509→   509→    return { chain: sourceNode, destination: audioCtx.destination };
+   510→   510→  }
+   511→   511→
+   512→   512→  const dest = audioCtx.createMediaStreamDestination();
+   513→   513→  const gainNode = audioCtx.createGain();
+   514→   514→  gainNode.gain.value = 1.0;
+   515→   515→
+   516→   516→  switch (effect) {
+   517→   517→    case "echo": {
+   518→   518→      const delay = audioCtx.createDelay(1.0);
+   519→   519→      delay.delayTime.value = 0.3;
+   520→   520→      const feedback = audioCtx.createGain();
+   521→   521→      feedback.gain.value = 0.5;
+   522→   522→      const wetGain = audioCtx.createGain();
+   523→   523→      wetGain.gain.value = 0.4;
+   524→   524→
+   525→   525→      sourceNode.connect(gainNode);
+   526→   526→      gainNode.connect(dest);
+   527→   527→      gainNode.connect(delay);
+   528→   528→      delay.connect(feedback);
+   529→   529→      feedback.connect(delay);
+   530→   530→      delay.connect(wetGain);
+   531→   531→      wetGain.connect(dest);
+   532→   532→      gainNode.connect(audioCtx.destination);
+   533→   533→      return { chain: gainNode, destination: dest };
+   534→   534→    }
+   535→   535→    case "reverb": {
+   536→   536→      // Create convolution reverb (synthetic impulse response)
+   537→   537→      const convolver = audioCtx.createConvolver();
+   538→   538→      const sampleRate = audioCtx.sampleRate;
+   539→   539→      const length = sampleRate * 2;
+   540→   540→      const impulse = audioCtx.createBuffer(2, length, sampleRate);
+   541→   541→      for (let ch = 0; ch < 2; ch++) {
+   542→   542→        const data = impulse.getChannelData(ch);
+   543→   543→        for (let i = 0; i < length; i++) {
+   544→   544→          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2.5);
+   545→   545→        }
+   546→   546→      }
+   547→   547→      convolver.buffer = impulse;
+   548→   548→
+   549→   549→      const wetGain = audioCtx.createGain();
+   550→   550→      wetGain.gain.value = 0.35;
+   551→   551→
+   552→   552→      sourceNode.connect(gainNode);
+   553→   553→      gainNode.connect(dest);
+   554→   554→      gainNode.connect(convolver);
+   555→   555→      convolver.connect(wetGain);
+   556→   556→      wetGain.connect(dest);
+   557→   557→      gainNode.connect(audioCtx.destination);
+   558→   558→      return { chain: gainNode, destination: dest };
+   559→   559→    }
+   560→   560→    case "deep": {
+   561→   561→      // Pitch down by playing slower — approximate with a simple lowpass
+   562→   562→      const filter = audioCtx.createBiquadFilter();
+   563→   563→      filter.type = "lowpass";
+   564→   564→      filter.frequency.value = 2000;
+   565→   565→      filter.Q.value = 1;
+   566→   566→
+   567→   567→      sourceNode.connect(gainNode);
+   568→   568→      gainNode.connect(filter);
+   569→   569→      filter.connect(dest);
+   570→   570→      gainNode.connect(audioCtx.destination);
+   571→   571→      return { chain: gainNode, destination: dest };
+   572→   572→    }
+   573→   573→    case "whisper-voice": {
+   574→   574→      // Bandpass for whispery effect
+   575→   575→      const bp = audioCtx.createBiquadFilter();
+   576→   576→      bp.type = "bandpass";
+   577→   577→      bp.frequency.value = 3000;
+   578→   578→      bp.Q.value = 0.5;
+   579→   579→
+   580→   580→      const noiseGain = audioCtx.createGain();
+   581→   581→      noiseGain.gain.value = 0.1;
+   582→   582→
+   583→   583→      sourceNode.connect(gainNode);
+   584→   584→      gainNode.connect(bp);
+   585→   585→      bp.connect(noiseGain);
+   586→   586→      noiseGain.connect(dest);
+   587→   587→      gainNode.connect(audioCtx.destination);
+   588→   588→      return { chain: gainNode, destination: dest };
+   589→   589→    }
+   590→   590→    case "radio": {
+   591→   591→      // Bandpass + distortion
+   592→   592→      const bp = audioCtx.createBiquadFilter();
+   593→   593→      bp.type = "bandpass";
+   594→   594→      bp.frequency.value = 2500;
+   595→   595→      bp.Q.value = 3;
+   596→   596→
+   597→   597→      const distortion = audioCtx.createWaveShaper();
+   598→   598→      const curve = new Float32Array(256);
+   599→   599→      for (let i = 0; i < 256; i++) {
+   600→   600→        const x = (i * 2) / 256 - 1;
+   601→   601→        curve[i] = (Math.PI + 3) * x / (Math.PI + 3 * Math.abs(x));
+   602→   602→      }
+   603→   603→      distortion.curve = curve;
+   604→   604→
+   605→   605→      sourceNode.connect(gainNode);
+   606→   606→      gainNode.connect(bp);
+   607→   607→      bp.connect(distortion);
+   608→   608→      distortion.connect(dest);
+   609→   609→      gainNode.connect(audioCtx.destination);
+   610→   610→      return { chain: gainNode, destination: dest };
+   611→   611→    }
+   612→   612→    default:
+   613→   613→      sourceNode.connect(dest);
+   614→   614→      sourceNode.connect(audioCtx.destination);
+   615→   615→      return { chain: sourceNode, destination: dest };
+   616→   616→  }
+   617→   617→}
+   618→   618→
+   619→   619→// ── Transition Renderers ──
+   620→   620→
+   621→   621→export interface TransitionFrame {
+   622→   622→  type: TransitionEffect;
+   623→   623→  duration: number; // in seconds
+   624→   624→}
+   625→   625→
+   626→   626→/** Render transition overlay. Returns true if transition is still active. */
+   627→   627→export function renderTransition(
+   628→   628→  ctx: CanvasRenderingContext2D,
+   629→   629→  W: number,
+   630→   630→  H: number,
+   631→   631→  t: number, // 0..1 progress within transition
+   632→   632→  transition: TransitionEffect,
+   633→   633→  nextImg?: HTMLImageElement,
+   634→   634→  nextStyleIndex?: number,
+   635→   635→): boolean {
+   636→   636→  if (transition === "none" || t >= 1) return false;
+   637→   637→
+   638→   638→  switch (transition) {
+   639→   639→    case "fade":
+   640→   640→      ctx.fillStyle = `rgba(0,0,0,${t})`;
+   641→   641→      ctx.fillRect(0, 0, W, H);
+   642→   642→      if (t > 0.5 && nextImg) {
+   643→   643→        ctx.globalAlpha = (t - 0.5) * 2;
+   644→   644→        ctx.drawImage(nextImg, 0, 0, W, H);
+   645→   645→        ctx.globalAlpha = 1;
+   646→   646→      }
+   647→   647→      return true;
+   648→   648→
+   649→   649→    case "glitch-cut": {
+   650→   650→      // Rapid glitch frames
+   651→   651→      const numSlices = Math.floor(10 + t * 20);
+   652→   652→      for (let i = 0; i < numSlices; i++) {
+   653→   653→        const y = Math.random() * H;
+   654→   654→        const h = Math.random() * 30 + 5;
+   655→   655→        ctx.fillStyle = `rgba(${Math.random() > 0.5 ? "139,92,246" : "255,255,255"}, ${0.1 + Math.random() * 0.2})`;
+   656→   656→        ctx.fillRect((Math.random() - 0.5) * 20, y, W, h);
+   657→   657→      }
+   658→   658→      return true;
+   659→   659→    }
+   660→   660→
+   661→   661→    case "flash": {
+   662→   662→      // White flash that fades
+   663→   663→      const flashIntensity = t < 0.3 ? t / 0.3 : 1 - ((t - 0.3) / 0.7);
+   664→   664→      ctx.fillStyle = `rgba(255,255,255,${flashIntensity * 0.9})`;
+   665→   665→      ctx.fillRect(0, 0, W, H);
+   666→   666→      return true;
+   667→   667→    }
+   668→   668→
+   669→   669→    case "distortion": {
+   670→   670→      // Wave distortion effect
+   671→   671→      try {
+   672→   672→        const imgData = ctx.getImageData(0, 0, W, H);
+   673→   673→        const copy = new ImageData(new Uint8ClampedArray(imgData.data), W, H);
+   674→   674→        const intensity = Math.sin(t * Math.PI) * 15;
+   675→   675→        for (let y = 0; y < H; y++) {
+   676→   676→          const offsetX = Math.sin(y * 0.02 + t * 20) * intensity;
+   677→   677→          const srcY = Math.min(H - 1, Math.max(0, y));
+   678→   678→          const dstY = Math.min(H - 1, Math.max(0, y));
+   679→   679→          for (let x = 0; x < W; x++) {
+   680→   680→            const srcX = Math.min(W - 1, Math.max(0, Math.floor(x + offsetX)));
+   681→   681→            const dstIdx = (dstY * W + x) * 4;
+   682→   682→            const srcIdx = (srcY * W + srcX) * 4;
+   683→   683→            copy.data[dstIdx] = imgData.data[srcIdx];
+   684→   684→            copy.data[dstIdx + 1] = imgData.data[srcIdx + 1];
+   685→   685→            copy.data[dstIdx + 2] = imgData.data[srcIdx + 2];
+   686→   686→          }
+   687→   687→        }
+   688→   688→        ctx.putImageData(copy, 0, 0);
+   689→   689→      } catch { /* cross-origin */ }
+   690→   690→      return true;
+   691→   691→    }
+   692→   692→
+   693→   693→    case "whisper": {
+   694→   694→      // Blur-like fade: darken + lighten
+   695→   695→      const darken = t < 0.5 ? t * 2 : 2 - t * 2;
+   696→   696→      ctx.fillStyle = `rgba(0,0,0,${darken * 0.7})`;
+   697→   697→      ctx.fillRect(0, 0, W, H);
+   698→   698→      if (t > 0.4 && nextImg) {
+   699→   699→        const alpha = (t - 0.4) / 0.6;
+   700→   700→        ctx.globalAlpha = alpha * 0.5;
+   701→   701→        ctx.drawImage(nextImg, 0, 0, W, H);
+   702→   702→        ctx.globalAlpha = 1;
+   703→   703→      }
+   704→   704→      return true;
+   705→   705→    }
+   706→   706→
+   707→   707→    default:
+   708→   708→      return false;
+   709→   709→  }
+   710→   710→}
+   711→   711→
+   712→   712→// ── Utility Functions ──
+   713→   713→
+   714→   714→function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+   715→   715→  const words = text.split(" ");
+   716→   716→  const lines: string[] = [];
+   717→   717→  let current = "";
+   718→   718→  for (const word of words) {
+   719→   719→    const test = current ? `${current} ${word}` : word;
+   720→   720→    if (ctx.measureText(test).width > maxWidth && current) {
+   721→   721→      lines.push(current);
+   722→   722→      current = word;
+   723→   723→    } else {
+   724→   724→      current = test;
+   725→   725→    }
+   726→   726→  }
+   727→   727→  if (current) lines.push(current);
+   728→   728→  return lines.slice(0, 3); // Max 3 lines
+   729→   729→}
+   730→   730→
+   731→   731→function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+   732→   732→  ctx.beginPath();
+   733→   733→  ctx.moveTo(x + r, y);
+   734→   734→  ctx.lineTo(x + w - r, y);
+   735→   735→  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+   736→   736→  ctx.lineTo(x + w, y + h - r);
+   737→   737→  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+   738→   738→  ctx.lineTo(x + r, y + h);
+   739→   739→  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+   740→   740→  ctx.lineTo(x, y + r);
+   741→   741→  ctx.quadraticCurveTo(x, y, x + r, y);
+   742→   742→  ctx.closePath();
+   743→   743→}

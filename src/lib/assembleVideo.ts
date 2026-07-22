@@ -1,24 +1,24 @@
 /**
  * Canvas + MediaRecorder video assembler
  * Replaces ffmpeg.wasm — no 30MB download, works on mobile, much faster.
- * Outputs WebM (accepted by YouTube & TikTok).
+ * Outputs WebM (accepted by YouTube).
  *
  * TikTok AI Features:
- *  - Vertical mode (9:16) for TikTok/Shorts
- *  - TikTok-style auto-captions (word-by-word highlight)
- *  - Scene transitions (fade, slide, glitch)
+ * - Visual effects (glitch, VHS, paranormal, noir, red-tint, film-grain, shadow-pulse)
+ * - Caption rendering (TikTok, cinematic, karaoke, glitch-text)
+ * - Voice effects (echo, reverb, deep, whisper, radio) via Web Audio API
+ * - Background music mixing
+ * - Transitions between scenes
  */
 
-export type VideoFormat = "16:9" | "9:16";
-export type TransitionType = "none" | "fade" | "slide-left" | "slide-up" | "glitch";
-export type CaptionStyle = "off" | "tiktok" | "tiktok-bold" | "karaoke";
-
-export type AssembleOptions = {
-  format?: VideoFormat;
-  transition?: TransitionType;
-  captions?: CaptionStyle;
-  transitionDuration?: number; // frames (default: 12)
-};
+import type { CaptionSegment } from "@/lib/ai-client";
+import {
+  applyVisualEffect,
+  renderCaption,
+  applyVoiceEffect,
+  renderTransition,
+  type TikTokAIOptions,
+} from "@/lib/tiktok-ai-effects";
 
 export type AssembleEvent =
   | { type: "message"; message: string }
@@ -70,7 +70,7 @@ async function fetchAudioBlob(url: string): Promise<Blob> {
     }
   }
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Audio HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`Áudio HTTP ${res.status}`);
   return await res.blob();
 }
 
@@ -82,236 +82,26 @@ function getAudioDuration(url: string): Promise<number> {
     a.onloadedmetadata = () => {
       const d = a.duration;
       if (isFinite(d) && d > 0) resolve(d);
-      else reject(new Error("duracao invalida"));
+      else reject(new Error("duração inválida"));
     };
-    a.onerror = () => reject(new Error("falha ao ler audio"));
+    a.onerror = () => reject(new Error("falha ao ler áudio"));
   });
 }
 
 /** Ken Burns styles */
 const KB_STYLES = [
-  { zoom: (t: number) => 1.0 + t * 0.3, ox: (t: number, _: number) => 0, oy: (t: number, _: number) => 0 },       // zoom in center
+  { zoom: (t: number) => 1.0 + t * 0.3,  ox: (t: number, _: number) => 0, oy: (t: number, _: number) => 0 },       // zoom in center
   { zoom: (t: number) => 1.35 - t * 0.3, ox: (_: number, __: number) => 0, oy: (_: number, __: number) => 0 },      // zoom out center
   { zoom: (_: number) => 1.25,           ox: (t: number) => -t * 0.2,  oy: (_: number) => 0 },                    // pan right
   { zoom: (_: number) => 1.25,           ox: (t: number) => -(1 - t) * 0.2, oy: (_: number) => 0 },              // pan left
   { zoom: (_: number) => 1.25,           ox: (_: number) => 0, oy: (t: number) => -t * 0.15 },                   // pan down
 ];
 
-// ── TikTok-style caption helpers ──────────────────────────────────
-
-interface CaptionWord {
-  text: string;
-  start: number; // 0..1 normalized
-  end: number;   // 0..1 normalized
-}
-
-/** Split narration text into words with timing proportional to duration */
-function buildCaptionWords(narration: string, totalWords: number): CaptionWord[] {
-  const words = narration.trim().split(/\s+/);
-  const step = 1 / Math.max(words.length, 1);
-  // Scale to use 90% of scene duration (10% padding at end)
-  const scale = 0.9;
-  const offset = 0.05;
-  return words.map((text, i) => ({
-    text,
-    start: offset + i * step * scale,
-    end: offset + (i + 1) * step * scale,
-  }));
-}
-
-/** Find which word index is active at time t (0..1) */
-function activeWordIndex(words: CaptionWord[], t: number): number {
-  for (let i = 0; i < words.length; i++) {
-    if (t >= words[i].start && t < words[i].end) return i;
-  }
-  return -1;
-}
-
-/** Render TikTok-style captions on canvas */
-function drawCaptions(
-  ctx: CanvasRenderingContext2D,
-  W: number,
-  H: number,
-  words: CaptionWord[],
-  t: number,
-  style: CaptionStyle,
-) {
-  if (style === "off" || words.length === 0) return;
-
-  const activeIdx = activeWordIndex(words, t);
-
-  // Caption area: bottom 30% of video
-  const captionY = H * 0.75;
-  const maxWidth = W * 0.85;
-  const fontSize = style === "tiktok-bold" ? Math.round(W * 0.055) : Math.round(W * 0.042);
-  const lineHeight = fontSize * 1.3;
-
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  // Wrap words into lines
-  const lines: { words: { text: string; idx: number }[]; width: number }[] = [];
-  let currentLine: { text: string; idx: number }[] = [];
-  let currentWidth = 0;
-
-  ctx.font = `900 ${fontSize}px 'Arial Black', 'Impact', Arial, sans-serif`;
-
-  for (let i = 0; i < words.length; i++) {
-    const wordWidth = ctx.measureText(words[i].text + " ").width;
-    if (currentWidth + wordWidth > maxWidth && currentLine.length > 0) {
-      lines.push({ words: currentLine, width: currentWidth });
-      currentLine = [];
-      currentWidth = 0;
-    }
-    currentLine.push({ text: words[i].text, idx: i });
-    currentWidth += wordWidth;
-  }
-  if (currentLine.length > 0) {
-    lines.push({ words: currentLine, width: currentWidth });
-  }
-
-  // Draw from bottom up (last line at bottom)
-  const totalHeight = lines.length * lineHeight;
-  const baseY = captionY + (H - captionY) / 2 - totalHeight / 2 + lineHeight / 2;
-
-  for (let li = lines.length - 1; li >= 0; li--) {
-    const line = lines[li];
-    const y = baseY + li * lineHeight;
-    const lineStartX = (W - line.width) / 2;
-
-    // Draw each word in the line
-    let x = lineStartX;
-    for (const word of line.words) {
-      const isActive = word.idx === activeIdx;
-      const isPast = word.idx < activeIdx;
-      const wordW = ctx.measureText(word.text + " ").width;
-
-      if (style === "tiktok" || style === "tiktok-bold") {
-        // Background box behind active word
-        if (isActive) {
-          const padX = fontSize * 0.15;
-          const padY = fontSize * 0.12;
-          ctx.fillStyle = style === "tiktok-bold" ? "#FF0050" : "#a78bfa";
-          const boxX = x - padX;
-          const boxY = y - fontSize / 2 - padY;
-          const boxW = ctx.measureText(word.text).width + padX * 2;
-          const boxH = fontSize + padY * 2;
-          const radius = fontSize * 0.15;
-          // Rounded rect
-          ctx.beginPath();
-          ctx.moveTo(boxX + radius, boxY);
-          ctx.lineTo(boxX + boxW - radius, boxY);
-          ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + radius);
-          ctx.lineTo(boxX + boxW, boxY + boxH - radius);
-          ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - radius, boxY + boxH);
-          ctx.lineTo(boxX + radius, boxY + boxH);
-          ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - radius);
-          ctx.lineTo(boxX, boxY + radius);
-          ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
-          ctx.closePath();
-          ctx.fill();
-
-          // Active word text in white
-          ctx.fillStyle = "#FFFFFF";
-          ctx.fillText(word.text, x + wordW / 2 - ctx.measureText(" ").width / 2, y);
-        } else {
-          // Inactive words: white with shadow
-          ctx.shadowColor = "rgba(0,0,0,0.8)";
-          ctx.shadowBlur = 4;
-          ctx.shadowOffsetX = 1;
-          ctx.shadowOffsetY = 1;
-          ctx.fillStyle = isPast ? "rgba(255,255,255,0.6)" : "#FFFFFF";
-          ctx.fillText(word.text, x + wordW / 2 - ctx.measureText(" ").width / 2, y);
-          ctx.shadowColor = "transparent";
-          ctx.shadowBlur = 0;
-          ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = 0;
-        }
-      } else if (style === "karaoke") {
-        // Karaoke: color gradient from past to active
-        ctx.shadowColor = "rgba(0,0,0,0.8)";
-        ctx.shadowBlur = 4;
-        ctx.fillStyle = isActive ? "#FF0050" : isPast ? "#FFD700" : "rgba(255,255,255,0.5)";
-        ctx.fillText(word.text, x + wordW / 2 - ctx.measureText(" ").width / 2, y);
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
-      }
-
-      x += wordW;
-    }
-  }
-}
-
-// ── TikTok transition effects ─────────────────────────────────────
-
-function applyTransition(
-  ctx: CanvasRenderingContext2D,
-  W: number,
-  H: number,
-  frameInTransition: number, // 0..transitionDuration
-  transitionDuration: number,
-  type: TransitionType,
-  nextSceneDraw: () => void,
-) {
-  const t = frameInTransition / transitionDuration; // 0..1
-
-  if (type === "fade") {
-    // Draw next scene with increasing opacity
-    ctx.save();
-    ctx.globalAlpha = t;
-    nextSceneDraw();
-    ctx.restore();
-  } else if (type === "slide-left") {
-    // Slide next scene in from right
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(W * (1 - t), 0, W * t, H);
-    ctx.clip();
-    ctx.translate(W * (1 - t), 0);
-    nextSceneDraw();
-    ctx.restore();
-  } else if (type === "slide-up") {
-    // Slide next scene in from bottom
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, H * (1 - t), W, H * t);
-    ctx.clip();
-    ctx.translate(0, H * (1 - t));
-    nextSceneDraw();
-    ctx.restore();
-  } else if (type === "glitch") {
-    // Glitch effect: RGB split + horizontal displacement
-    ctx.save();
-    // Random horizontal slices displacement
-    const sliceCount = Math.floor(5 + Math.random() * 8);
-    for (let s = 0; s < sliceCount; s++) {
-      const sy = Math.random() * H;
-      const sh = 5 + Math.random() * 30;
-      const sx = (Math.random() - 0.5) * 40 * t;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(sx, sy, W, sh);
-      ctx.clip();
-      ctx.translate(sx, 0);
-      ctx.globalAlpha = t * (0.5 + Math.random() * 0.5);
-      nextSceneDraw();
-      ctx.restore();
-    }
-    // Flash
-    if (Math.random() < 0.3 * t) {
-      ctx.fillStyle = `rgba(255, 0, 80, ${0.1 + Math.random() * 0.15 * t})`;
-      ctx.fillRect(0, 0, W, H);
-    }
-    ctx.restore();
-  }
-}
-
 function drawFrame(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   W: number, H: number,
   t: number, styleIndex: number,
-  cinematicBars: boolean = true,
 ) {
   const style = KB_STYLES[styleIndex % KB_STYLES.length];
   const zoom = style.zoom(t);
@@ -345,18 +135,19 @@ function drawFrame(
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
-  // Cinematic bars (only for 16:9)
-  if (cinematicBars) {
-    ctx.fillStyle = "rgba(0,0,0,0.45)";
-    ctx.fillRect(0, 0, W, H * 0.06);
-    ctx.fillRect(0, H * 0.94, W, H * 0.06);
-  }
+  // Cinematic bars
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.fillRect(0, 0, W, H * 0.06);
+  ctx.fillRect(0, H * 0.94, W, H * 0.06);
 }
 
-export type SceneAsset = { imageUrl: string; audioUrl: string; videoUrl?: string; narration?: string };
+export type SceneAsset = { imageUrl: string; audioUrl: string; videoUrl?: string };
+
+/** Per-scene caption data (offset-adjusted for each scene) */
+type SceneCaptions = { segments: CaptionSegment[]; style: NonNullable<TikTokAIOptions["captions"]>["style"] };
 
 /**
- * Render a single scene (image + Ken Burns) to a video Blob
+ * Render a single scene (image + Ken Burns + TikTok AI effects) to a video Blob
  */
 async function renderSceneToBlob(
   index: number,
@@ -364,27 +155,43 @@ async function renderSceneToBlob(
   durationSec: number,
   onProgress: ProgressHandler,
   totalScenes: number,
-  options: AssembleOptions,
+  tiktokOpts: TikTokAIOptions,
+  sceneCaptions: SceneCaptions | null,
+  musicBlob: Blob | null,
+  musicVolume: number,
+  nextImg: HTMLImageElement | null,
+  transitionDurationSec: number,
 ): Promise<Blob> {
   const FPS = 24;
-  const isVertical = options.format === "9:16";
-  const W = isVertical ? 720 : 1280;
-  const H = isVertical ? 1280 : 720;
+  const W = 1280;
+  const H = 720;
   const totalFrames = Math.round(durationSec * FPS);
+  const transFrames = Math.round(transitionDurationSec * FPS);
+  const hasEffect = tiktokOpts.visualEffect !== "none";
+  const hasCaptions = tiktokOpts.captions.enabled && sceneCaptions && sceneCaptions.segments.length > 0;
+  const hasVoiceEffect = tiktokOpts.voiceEffect !== "none";
+  const hasMusic = !!musicBlob && tiktokOpts.music.enabled;
+  const hasTransition = tiktokOpts.transition !== "none" && transFrames > 0 && nextImg;
 
   // Load image
-  emit(onProgress, `Baixando imagem cena ${index + 1}/${totalScenes}...`, { type: "scene-download", index, total: totalScenes, item: "imagem", pct: 20 });
+  emit(onProgress, `Baixando imagem cena ${index + 1}/${totalScenes}…`, { type: "scene-download", index, total: totalScenes, item: "imagem", pct: 20 });
   const img = await fetchImage(scene.imageUrl);
 
   // Load audio as blob
-  emit(onProgress, `Baixando audio cena ${index + 1}/${totalScenes}...`, { type: "scene-download", index, total: totalScenes, item: "audio", pct: 50 });
+  emit(onProgress, `Baixando áudio cena ${index + 1}/${totalScenes}…`, { type: "scene-download", index, total: totalScenes, item: "áudio", pct: 50 });
   const audioBlob = await fetchAudioBlob(scene.audioUrl);
   const audioUrl = URL.createObjectURL(audioBlob);
 
-  // Build caption words from narration
-  const captionWords = options.captions && options.captions !== "off" && scene.narration
-    ? buildCaptionWords(scene.narration, scene.narration.split(/\s+/).length)
-    : [];
+  // Load music if provided
+  let musicAudioEl: HTMLAudioElement | null = null;
+  let musicUrl = "";
+  if (hasMusic && musicBlob) {
+    musicUrl = URL.createObjectURL(musicBlob);
+    musicAudioEl = new Audio(musicUrl);
+    musicAudioEl.crossOrigin = "anonymous";
+    musicAudioEl.loop = true;
+    musicAudioEl.volume = musicVolume;
+  }
 
   // Setup canvas
   const canvas = document.createElement("canvas");
@@ -397,15 +204,37 @@ async function renderSceneToBlob(
   const audioEl = new Audio(audioUrl);
   audioEl.crossOrigin = "anonymous";
   let audioCtx: AudioContext | null = null;
-  let audioSource: MediaStreamAudioSourceNode | null = null;
+  let audioSource: MediaElementAudioSourceNode | null = null;
 
   try {
     audioCtx = new AudioContext();
     audioSource = audioCtx.createMediaElementSource(audioEl);
+
+    // Apply voice effect if enabled
     const dest = audioCtx.createMediaStreamDestination();
-    audioSource.connect(dest);
-    audioSource.connect(audioCtx.destination);
-    dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+    if (hasVoiceEffect) {
+      const { destination: effectDest } = applyVoiceEffect(
+        audioCtx,
+        audioSource,
+        tiktokOpts.voiceEffect,
+      );
+      (effectDest as MediaStreamAudioDestinationNode).stream.getAudioTracks().forEach((track: MediaStreamTrack) => stream.addTrack(track));
+    } else {
+      audioSource.connect(dest);
+      audioSource.connect(audioCtx.destination);
+    }
+    dest.stream.getAudioTracks().forEach((track: MediaStreamTrack) => stream.addTrack(track));
+
+    // Mix background music if provided
+    if (hasMusic && musicAudioEl) {
+      const musicSource = audioCtx.createMediaElementSource(musicAudioEl);
+      const musicGain = audioCtx.createGain();
+      musicGain.gain.value = musicVolume;
+      const musicDest = audioCtx.createMediaStreamDestination();
+      musicSource.connect(musicGain);
+      musicGain.connect(musicDest);
+      musicDest.stream.getAudioTracks().forEach((track: MediaStreamTrack) => stream.addTrack(track));
+    }
   } catch (e) {
     console.warn("[audio context failed, recording without audio track]", e);
   }
@@ -416,25 +245,38 @@ async function renderSceneToBlob(
   const mime = MediaRecorder.isTypeSupported(mimeVP9) ? mimeVP9 : mimeVP8;
   const recorder = new MediaRecorder(stream, {
     mimeType: mime,
-    videoBitsPerSecond: isVertical ? 3_000_000 : 2_500_000,
+    videoBitsPerSecond: 2_500_000,
   });
 
   const chunks: Blob[] = [];
   recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
+  const tiktokLabel = [
+    hasEffect ? `efeito ${tiktokOpts.visualEffect}` : "",
+    hasCaptions ? `legendas ${sceneCaptions!.style}` : "",
+    hasVoiceEffect ? `voz ${tiktokOpts.voiceEffect}` : "",
+    hasMusic ? "música IA" : "",
+    hasTransition ? `transição ${tiktokOpts.transition}` : "",
+  ].filter(Boolean).join(", ");
+
+  if (tiktokLabel) {
+    emit(onProgress, `TikTok AI: ${tiktokLabel}`, { type: "log", message: tiktokLabel });
+  }
+
   return new Promise<Blob>((resolve, reject) => {
     recorder.onerror = (e) => reject(new Error(`MediaRecorder erro: ${e}`));
     recorder.onstop = () => {
       URL.revokeObjectURL(audioUrl);
+      if (musicUrl) URL.revokeObjectURL(musicUrl);
       resolve(new Blob(chunks, { type: "video/webm" }));
     };
 
-    const formatLabel = isVertical ? "9:16 TikTok" : "16:9 YouTube";
-    emit(onProgress, `Renderizando cena ${index + 1}/${totalScenes} (${formatLabel})...`, { type: "scene-render", index, total: totalScenes });
+    emit(onProgress, `Renderizando cena ${index + 1}/${totalScenes}…`, { type: "scene-render", index, total: totalScenes });
     recorder.start(100); // collect data every 100ms
 
     // Start audio playback synced with rendering
     audioEl.play().catch(() => {});
+    musicAudioEl?.play().catch(() => {});
 
     let frame = 0;
     const intervalMs = 1000 / FPS;
@@ -443,6 +285,8 @@ async function renderSceneToBlob(
       if (frame >= totalFrames) {
         audioEl.pause();
         audioEl.currentTime = 0;
+        musicAudioEl?.pause();
+        musicAudioEl && (musicAudioEl.currentTime = 0);
         if (audioSource) { audioSource.disconnect(); }
         if (audioCtx) { audioCtx.close().catch(() => {}); }
         recorder.stop();
@@ -451,19 +295,33 @@ async function renderSceneToBlob(
       }
 
       const t = frame / totalFrames; // 0..1 normalized progress
-      drawFrame(ctx, img, W, H, t, index, !isVertical);
+      const currentTimeSec = frame / FPS;
 
-      // Draw TikTok-style captions
-      if (captionWords.length > 0) {
-        drawCaptions(ctx, W, H, captionWords, t, options.captions!);
+      // 1. Draw base Ken Burns frame
+      drawFrame(ctx, img, W, H, t, index);
+
+      // 2. Apply TikTok AI visual effect
+      if (hasEffect) {
+        applyVisualEffect(ctx, W, H, t, frame, tiktokOpts.visualEffect);
+      }
+
+      // 3. Render transition at end of scene (last N frames)
+      if (hasTransition && frame >= totalFrames - transFrames) {
+        const transT = (frame - (totalFrames - transFrames)) / transFrames;
+        renderTransition(ctx, W, H, transT, tiktokOpts.transition, nextImg ?? undefined, (index + 1) % KB_STYLES.length);
+      }
+
+      // 4. Render captions
+      if (hasCaptions && sceneCaptions) {
+        renderCaption(ctx, W, H, currentTimeSec, sceneCaptions.segments, sceneCaptions.style, frame);
       }
 
       // Report progress
       const pct = Math.round((frame / totalFrames) * 100);
-      emit(onProgress, `Renderizando cena ${index + 1}/${totalScenes}... ${pct}%`, {
+      emit(onProgress, `Renderizando cena ${index + 1}/${totalScenes}… ${pct}%`, {
         type: "ffmpeg-progress",
         progress: frame / totalFrames,
-        time: frame / FPS,
+        time: currentTimeSec,
         index,
       });
 
@@ -475,26 +333,79 @@ async function renderSceneToBlob(
   });
 }
 
+export type AssembleOptions = {
+  tiktokAI?: TikTokAIOptions;
+  /** Per-scene caption segments (keyed by scene index, already offset to 0-based per scene) */
+  sceneCaptions?: Record<number, CaptionSegment[]>;
+  /** Background music blob */
+  musicBlob?: Blob | null;
+};
+
 export async function assembleVideo(
   scenes: SceneAsset[],
   onProgress: ProgressHandler,
-  options: AssembleOptions = {},
+  options?: AssembleOptions,
 ): Promise<Blob> {
+  const tiktokOpts = options?.tiktokAI;
+  const sceneCaps = options?.sceneCaptions;
+  const musicBlob = options?.musicBlob ?? null;
+
   const startTime = Date.now();
-  const format = options.format ?? "16:9";
-  const transition = options.transition ?? "none";
-  const captions = options.captions ?? "off";
-  const transDur = options.transitionDuration ?? 12;
+  const engineLabel = tiktokOpts && (
+    tiktokOpts.visualEffect !== "none" ||
+    tiktokOpts.captions.enabled ||
+    tiktokOpts.voiceEffect !== "none" ||
+    tiktokOpts.music.enabled ||
+    tiktokOpts.transition !== "none"
+  )
+    ? "Canvas + MediaRecorder + TikTok AI"
+    : "Canvas + MediaRecorder";
 
-  const formatLabel = format === "9:16" ? "9:16 (TikTok/Shorts)" : "16:9 (YouTube)";
-  emit(onProgress, `Iniciando montagem... (${formatLabel}, legendas: ${captions}, transicao: ${transition})`, { type: "engine", source: "Canvas + MediaRecorder" });
-  emit(onProgress, "Preparando...", { type: "engine-download", pct: 100, mb: "0" });
+  emit(onProgress, `Iniciando montagem… (${engineLabel})`, { type: "engine", source: engineLabel });
+  emit(onProgress, "Preparando…", { type: "engine-download", pct: 100, mb: "0" });
 
+  // Log active TikTok AI features
+  if (tiktokOpts) {
+    const features: string[] = [];
+    if (tiktokOpts.visualEffect !== "none") features.push(`Efeito visual: ${tiktokOpts.visualEffect}`);
+    if (tiktokOpts.captions.enabled) features.push(`Legendas: ${tiktokOpts.captions.style}`);
+    if (tiktokOpts.voiceEffect !== "none") features.push(`Efeito de voz: ${tiktokOpts.voiceEffect}`);
+    if (tiktokOpts.music.enabled && tiktokOpts.music.audioUrl) features.push(`Música: ${tiktokOpts.music.mood}`);
+    if (tiktokOpts.transition !== "none") features.push(`Transição: ${tiktokOpts.transition}`);
+    if (features.length) {
+      emit(onProgress, `TikTok AI ativo: ${features.join(" | ")}`, { type: "log", message: features.join(" | ") });
+    }
+  }
+
+  // Pre-load all images for transition support
+  emit(onProgress, "Pré-carregando imagens para transições…");
+  const loadedImages: (HTMLImageElement | null)[] = [];
+  for (let i = 0; i < scenes.length; i++) {
+    try {
+      loadedImages.push(await fetchImage(scenes[i].imageUrl));
+    } catch {
+      loadedImages.push(null);
+    }
+  }
+
+  // Fetch music blob if URL provided
+  let resolvedMusicBlob = musicBlob;
+  if (!resolvedMusicBlob && tiktokOpts?.music.enabled && tiktokOpts.music.audioUrl) {
+    try {
+      emit(onProgress, "Baixando música de fundo…");
+      resolvedMusicBlob = await fetchAudioBlob(tiktokOpts.music.audioUrl);
+    } catch (e) {
+      console.warn("[music download failed]", e);
+      resolvedMusicBlob = null;
+    }
+  }
+
+  const TRANSITION_DURATION = 0.5; // seconds for transition at end of scene
   const sceneBlobs: Blob[] = [];
 
   for (let i = 0; i < scenes.length; i++) {
     const sceneStart = Date.now();
-    emit(onProgress, `Preparando cena ${i + 1}/${scenes.length}...`, { type: "scene-start", index: i, total: scenes.length });
+    emit(onProgress, `Preparando cena ${i + 1}/${scenes.length}…`, { type: "scene-start", index: i, total: scenes.length });
 
     let durSec = 8;
     try {
@@ -503,9 +414,9 @@ export async function assembleVideo(
 
     // For animated video scenes (Replicate), download directly as blob
     if (scenes[i].videoUrl) {
-      emit(onProgress, `Baixando video cena ${i + 1}/${scenes.length}...`, { type: "scene-download", index: i, total: scenes.length, item: "video", pct: 50 });
+      emit(onProgress, `Baixando vídeo cena ${i + 1}/${scenes.length}…`, { type: "scene-download", index: i, total: scenes.length, item: "vídeo", pct: 50 });
       try {
-        const vidBlob = await fetchAudioBlob(scenes[i].videoUrl);
+        const vidBlob = await fetchAudioBlob(scenes[i].videoUrl!);
         sceneBlobs.push(vidBlob);
         emit(onProgress, `Cena ${i + 1}/${scenes.length} pronta.`, { type: "scene-done", index: i, total: scenes.length });
         continue;
@@ -514,73 +425,44 @@ export async function assembleVideo(
       }
     }
 
-    const blob = await renderSceneToBlob(i, scenes[i], durSec, onProgress, scenes.length, { format, transition: "none", captions, transitionDuration: transDur });
+    // Build per-scene captions
+    const caps = (tiktokOpts?.captions.enabled && sceneCaps?.[i])
+      ? { segments: sceneCaps[i], style: tiktokOpts.captions.style }
+      : null;
+
+    // Next image for transition
+    const nextImage = (i < scenes.length - 1) ? loadedImages[i + 1] : null;
+
+    const blob = await renderSceneToBlob(
+      i,
+      scenes[i],
+      durSec,
+      onProgress,
+      scenes.length,
+      tiktokOpts ?? {
+        captions: { enabled: false, style: "tiktok", segments: [] },
+        music: { enabled: false, audioUrl: null, volume: 0.15, mood: "dark-suspense" },
+        visualEffect: "none",
+        voiceEffect: "none",
+        transition: "none",
+      },
+      caps,
+      resolvedMusicBlob,
+      tiktokOpts?.music.volume ?? 0.15,
+      nextImage,
+      tiktokOpts?.transition !== "none" ? TRANSITION_DURATION : 0,
+    );
     sceneBlobs.push(blob);
 
     const elapsed = ((Date.now() - sceneStart) / 1000).toFixed(1);
     emit(onProgress, `Cena ${i + 1}/${scenes.length} pronta (${elapsed}s).`, { type: "scene-done", index: i, total: scenes.length });
   }
 
-  // If transition is enabled and we have multiple scenes, apply transitions between scenes
-  let finalBlob: Blob;
-  if (transition !== "none" && scenes.length > 1 && (format === "9:16" || true)) {
-    emit(onProgress, "Aplicando transicoes entre cenas...", { type: "concat", total: scenes.length });
-    // For now, simple concatenation with transitions would require re-rendering
-    // which is expensive. The transition frames are rendered per-scene already.
-    // We'll do a smarter approach: render transitions between scene blobs
-    // using a second pass with canvas compositing.
-    finalBlob = await applyTransitionsBetweenScenes(sceneBlobs, scenes, onProgress, options);
-  } else {
-    emit(onProgress, "Unindo todas as cenas...", { type: "concat", total: scenes.length });
-    finalBlob = new Blob(sceneBlobs, { type: "video/webm" });
-  }
+  // Concatenate all scene blobs into one
+  emit(onProgress, "Unindo todas as cenas…", { type: "concat", total: scenes.length });
+  const finalBlob = new Blob(sceneBlobs, { type: "video/webm" });
 
   const totalElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  emit(onProgress, `Video pronto em ${totalElapsed}s! (${formatLabel})`, { type: "done" });
+  emit(onProgress, `Vídeo pronto em ${totalElapsed}s!`, { type: "done" });
   return finalBlob;
-}
-
-/**
- * Apply transitions between scene blobs using canvas compositing.
- * This re-renders the transition frames by drawing consecutive scene videos
- * onto a canvas with transition effects.
- */
-async function applyTransitionsBetweenScenes(
-  sceneBlobs: Blob[],
-  scenes: SceneAsset[],
-  onProgress: ProgressHandler,
-  options: AssembleOptions,
-): Promise<Blob> {
-  const FPS = 24;
-  const isVertical = options.format === "9:16";
-  const W = isVertical ? 720 : 1280;
-  const H = isVertical ? 1280 : 720;
-  const transDur = options.transitionDuration ?? 12; // frames
-
-  // Load all scene blobs as video elements
-  const videoEls: HTMLVideoElement[] = [];
-  for (let i = 0; i < sceneBlobs.length; i++) {
-    const url = URL.createObjectURL(sceneBlobs[i]);
-    const vid = document.createElement("video");
-    vid.muted = true;
-    vid.src = url;
-    await new Promise<void>((resolve) => {
-      vid.onloadedmetadata = () => resolve();
-      vid.onerror = () => resolve();
-    });
-    videoEls.push(vid);
-  }
-
-  // For simplicity, we concatenate scene blobs directly
-  // Real transition compositing between video elements is complex
-  // and would require significant rework of the pipeline.
-  // The transition visual is already applied in the Ken Burns canvas render.
-  // This function returns the concatenated result.
-
-  // Clean up
-  videoEls.forEach((v, i) => {
-    if (v.src.startsWith("blob:")) URL.revokeObjectURL(v.src);
-  });
-
-  return new Blob(sceneBlobs, { type: "video/webm" });
 }
