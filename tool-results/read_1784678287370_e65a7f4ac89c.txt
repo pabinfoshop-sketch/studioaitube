@@ -1,0 +1,517 @@
+     1→import { createFileRoute, Link } from "@tanstack/react-router";
+     2→import heroImg from "@/assets/hero-scene.jpg";
+     3→import featTemplates from "@/assets/feat-templates.jpg";
+     4→import featCharacters from "@/assets/feat-characters.jpg";
+     5→import featTransitions from "@/assets/feat-transitions.jpg";
+     6→import { Button } from "@/components/ui/button";
+     7→import { Card } from "@/components/ui/card";
+     8→import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+     9→import {
+    10→  Sparkles, ArrowRight, Play, Star, Menu, Pause,
+    11→  Wand2, Mic, Film, Zap, Youtube, Layers, Rocket, Check,
+    12→} from "lucide-react";
+    13→import { useEffect, useRef, useState } from "react";
+    14→
+    15→export const Route = createFileRoute("/")({
+    16→  component: Index,
+    17→});
+    18→
+    19→const navLinks = [
+    20→  { href: "#tools", label: "Ferramentas" },
+    21→  { href: "#features", label: "Recursos" },
+    22→  { href: "#models", label: "Modelos IA" },
+    23→  { href: "#testimonials", label: "Depoimentos" },
+    24→  { href: "#pricing", label: "Preços" },
+    25→];
+    26→
+    27→const scenes = [
+    28→  { title: "Roteiro", icon: Wand2, color: "from-indigo-500 to-blue-500", caption: "IA gerando roteiro cena a cena..." },
+    29→  { title: "Imagem", icon: Film, color: "from-cyan-500 to-blue-500", caption: "Renderizando cenas cinematográficas..." },
+    30→  { title: "Narração", icon: Mic, color: "from-emerald-500 to-teal-500", caption: "Sintetizando voz profissional..." },
+    31→  { title: "Montagem", icon: Play, color: "from-blue-500 to-indigo-500", caption: "Montando vídeo MP4 em 1080p..." },
+    32→];
+    33→
+    34→const tools = [
+    35→  { emoji: "🎬", label: "Vídeo dark", img: "https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=600&auto=format&fit=crop" },
+    36→  { emoji: "👻", label: "História assombrada", img: "https://images.unsplash.com/photo-1507434965515-61970f2bd7c6?w=600&auto=format&fit=crop" },
+    37→  { emoji: "🔪", label: "True crime", img: "https://images.unsplash.com/photo-1509909756405-be0199881695?w=600&auto=format&fit=crop" },
+    38→  { emoji: "🌌", label: "Mistério cósmico", img: "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=600&auto=format&fit=crop" },
+    39→  { emoji: "⚡", label: "Vídeo num clique", img: "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=600&auto=format&fit=crop" },
+    40→  { emoji: "🖼️", label: "Imagem para vídeo", img: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600&auto=format&fit=crop" },
+    41→  { emoji: "💡", label: "Explicativo", img: "https://images.unsplash.com/photo-1552664730-d307ca884978?w=600&auto=format&fit=crop" },
+    42→];
+    43→
+    44→const models = ["Gemini 2.5", "GPT-4o TTS", "Nano Banana", "VEO 3", "Sora 2", "HaiLuo", "Kling", "Midjourney", "Qwen", "SeeDance"];
+    45→
+    46→const allTools: [string, string, typeof Wand2][] = [
+    47→  ["História para vídeo", "Transforme histórias em vídeos estruturados, organizados por cenas.", Layers],
+    48→  ["Texto para vídeo", "Crie vídeos a partir de descrições de texto simples.", Wand2],
+    49→  ["Guião para vídeo", "Converta guiões escritos em vídeos completos.", Film],
+    50→  ["Vídeos longos até 10min", "Vídeos coerentes do início ao fim, prontos para monetizar.", Rocket],
+    51→  ["Animação com IA", "Gere vídeos animados sem trabalho manual de animação.", Zap],
+    52→  ["Narração TTS realista", "Vozes naturais em múltiplos tons — de ASMR a terror.", Mic],
+    53→  ["Imagem para vídeo", "Anime imagens e ilustrações em cenas em movimento.", Film],
+    54→  ["Editor visual", "Refine cenas com uma interface simples e rápida.", Layers],
+    55→  ["Legendas com IA", "Gere legendas precisas para qualquer vídeo.", Sparkles],
+    56→];
+    57→
+    58→const testimonials = [
+    59→  { name: "Sarah Chen", role: "Criadora de conteúdo", img: "https://i.pravatar.cc/150?img=1", text: "Meu canal dark cresceu 3x em 2 meses. As cenas cinematográficas geradas parecem feitas em estúdio." },
+    60→  { name: "Michael Rodriguez", role: "YouTuber true crime", img: "https://i.pravatar.cc/150?img=12", text: "Da ideia ao MP4 pronto em uma tarde. Antes eu levava uma semana editando." },
+    61→  { name: "Emily Watson", role: "Storyteller", img: "https://i.pravatar.cc/150?img=5", text: "A voz Onyx dá o tom perfeito pras minhas histórias assombradas. Meus inscritos adoraram." },
+    62→  { name: "David Kim", role: "Editor de vídeo", img: "https://i.pravatar.cc/150?img=13", text: "Uso pra prototipar cenas antes da filmagem. Economizo horas de storyboard." },
+    63→  { name: "Jessica Thompson", role: "Podcaster", img: "https://i.pravatar.cc/150?img=9", text: "Transformei meus episódios em vídeos visuais em minutos. Retenção subiu muito." },
+    64→  { name: "Robert Anderson", role: "Criador indie", img: "https://i.pravatar.cc/150?img=15", text: "Custo zero pra começar, resultado profissional. Isso simplesmente não existia antes." },
+    65→];
+    66→
+    67→function useCountUp(target: number, duration = 1600, start = false) {
+    68→  const [n, setN] = useState(0);
+    69→  useEffect(() => {
+    70→    if (!start) return;
+    71→    const t0 = performance.now();
+    72→    let raf = 0;
+    73→    const tick = (t: number) => {
+    74→      const p = Math.min(1, (t - t0) / duration);
+    75→      const eased = 1 - Math.pow(1 - p, 3);
+    76→      setN(Math.floor(eased * target));
+    77→      if (p < 1) raf = requestAnimationFrame(tick);
+    78→    };
+    79→    raf = requestAnimationFrame(tick);
+    80→    return () => cancelAnimationFrame(raf);
+    81→  }, [target, duration, start]);
+    82→  return n;
+    83→}
+    84→
+    85→function Stat({ n, suffix, label, start }: { n: number; suffix: string; label: string; start: boolean }) {
+    86→  const v = useCountUp(n, 1800, start);
+    87→  return (
+    88→    <div>
+    89→      <div className="text-3xl sm:text-5xl md:text-6xl font-semibold bg-gradient-to-r from-cyan-300 via-primary to-accent bg-clip-text text-transparent tabular-nums">
+    90→        {v.toLocaleString("pt-BR")}{suffix}
+    91→      </div>
+    92→      <div className="mt-2 text-xs sm:text-sm text-muted-foreground">{label}</div>
+    93→    </div>
+    94→  );
+    95→}
+    96→
+    97→function Index() {
+    98→  const [playing, setPlaying] = useState(true);
+    99→  const [scene, setScene] = useState(0);
+   100→  const [menuOpen, setMenuOpen] = useState(false);
+   101→  const [statsInView, setStatsInView] = useState(false);
+   102→  const statsRef = useRef<HTMLDivElement | null>(null);
+   103→  const heroRef = useRef<HTMLDivElement | null>(null);
+   104→
+   105→  useEffect(() => {
+   106→    if (!playing) return;
+   107→    const t = setInterval(() => setScene((s) => (s + 1) % scenes.length), 2400);
+   108→    return () => clearInterval(t);
+   109→  }, [playing]);
+   110→
+   111→  useEffect(() => {
+   112→    const el = statsRef.current;
+   113→    if (!el) return;
+   114→    const io = new IntersectionObserver(
+   115→      ([e]) => e.isIntersecting && setStatsInView(true),
+   116→      { threshold: 0.3 },
+   117→    );
+   118→    io.observe(el);
+   119→    return () => io.disconnect();
+   120→  }, []);
+   121→
+   122→  useEffect(() => {
+   123→    const el = heroRef.current;
+   124→    if (!el) return;
+   125→    const onMove = (e: MouseEvent) => {
+   126→      const r = el.getBoundingClientRect();
+   127→      el.style.setProperty("--mx", `${((e.clientX - r.left) / r.width) * 100}%`);
+   128→      el.style.setProperty("--my", `${((e.clientY - r.top) / r.height) * 100}%`);
+   129→    };
+   130→    el.addEventListener("mousemove", onMove);
+   131→    return () => el.removeEventListener("mousemove", onMove);
+   132→  }, []);
+   133→
+   134→  const scrollTo = (href: string) => {
+   135→    setMenuOpen(false);
+   136→    const el = document.querySelector(href);
+   137→    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+   138→  };
+   139→
+   140→  const loopModels = [...models, ...models];
+   141→  const loopTestimonials = [...testimonials, ...testimonials];
+   142→
+   143→  return (
+   144→    <div className="min-h-screen bg-background text-foreground overflow-x-hidden scroll-smooth">
+   145→      {/* Ambient background */}
+   146→      <div className="pointer-events-none fixed inset-0 -z-10">
+   147→        <div className="absolute -top-32 left-1/4 h-[600px] w-[600px] rounded-full bg-primary/25 blur-[180px] animate-float-slow" />
+   148→        <div className="absolute top-1/3 -right-32 h-[600px] w-[600px] rounded-full bg-accent/25 blur-[180px] animate-float-slow" style={{ animationDelay: "2s" }} />
+   149→        <div className="absolute bottom-0 left-1/3 h-[500px] w-[500px] rounded-full bg-cyan-500/15 blur-[160px] animate-float-slow" style={{ animationDelay: "4s" }} />
+   150→        <div
+   151→          className="absolute inset-0 opacity-[0.05]"
+   152→          style={{
+   153→            backgroundImage:
+   154→              "linear-gradient(rgba(255,255,255,.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.5) 1px, transparent 1px)",
+   155→            backgroundSize: "60px 60px",
+   156→          }}
+   157→        />
+   158→      </div>
+   159→
+   160→      <header className="sticky top-0 z-40 backdrop-blur-xl bg-background/70 border-b border-border">
+   161→        <div className="mx-auto max-w-7xl flex items-center justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4">
+   162→          <button onClick={() => scrollTo("#top")} className="flex items-center gap-2 font-semibold tracking-tight shrink-0 group">
+   163→            <span className="relative h-9 w-9 rounded-full bg-gradient-to-br from-cyan-400 via-primary to-accent flex items-center justify-center shadow-lg shadow-primary/40 group-hover:scale-110 transition">
+   164→              <Sparkles className="h-4 w-4 text-background" />
+   165→              <span className="absolute inset-0 rounded-full bg-primary/40 blur-md -z-10 group-hover:blur-lg transition" />
+   166→            </span>
+   167→            <span className="text-sm sm:text-base bg-gradient-to-r from-white to-cyan-200 bg-clip-text text-transparent">AIDarkCesar</span>
+   168→          </button>
+   169→          <nav className="hidden lg:flex items-center gap-8 text-sm text-muted-foreground">
+   170→            {navLinks.map((l) => (
+   171→              <button key={l.href} onClick={() => scrollTo(l.href)} className="relative hover:text-foreground transition-colors after:content-[''] after:absolute after:left-0 after:-bottom-1 after:h-px after:w-0 hover:after:w-full after:bg-primary after:transition-all">
+   172→                {l.label}
+   173→              </button>
+   174→            ))}
+   175→          </nav>
+   176→          <div className="flex items-center gap-2">
+   177→            <Button asChild size="sm" className="rounded-full btn-blue-gradient text-xs sm:text-sm border-0">
+   178→              <Link to="/studio">Abrir Studio</Link>
+   179→            </Button>
+   180→            <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+   181→              <SheetTrigger asChild>
+   182→                <Button variant="outline" size="icon" className="lg:hidden rounded-full border-border bg-card/50 h-9 w-9">
+   183→                  <Menu className="h-4 w-4" />
+   184→                </Button>
+   185→              </SheetTrigger>
+   186→              <SheetContent side="right" className="bg-background border-border">
+   187→                <nav className="mt-10 flex flex-col gap-2">
+   188→                  {navLinks.map((l) => (
+   189→                    <button key={l.href} onClick={() => scrollTo(l.href)} className="text-left px-4 py-3 rounded-xl bg-card border border-border hover:border-primary/40 transition">
+   190→                      {l.label}
+   191→                    </button>
+   192→                  ))}
+   193→                  <Link to="/studio" onClick={() => setMenuOpen(false)} className="mt-4 text-center px-4 py-3 rounded-full btn-blue-gradient font-medium">
+   194→                    Abrir Studio
+   195→                  </Link>
+   196→                </nav>
+   197→              </SheetContent>
+   198→            </Sheet>
+   199→          </div>
+   200→        </div>
+   201→      </header>
+   202→
+   203→      {/* HERO */}
+   204→      <section
+   205→        id="top"
+   206→        ref={heroRef}
+   207→        className="relative mx-auto max-w-6xl px-4 sm:px-6 pt-16 sm:pt-24 pb-16 text-center"
+   208→        style={{ ["--mx" as string]: "50%", ["--my" as string]: "50%" } as React.CSSProperties}
+   209→      >
+   210→        <div
+   211→          aria-hidden
+   212→          className="pointer-events-none absolute inset-0 -z-10 opacity-70"
+   213→          style={{
+   214→            background:
+   215→              "radial-gradient(600px circle at var(--mx) var(--my), oklch(0.65 0.20 250 / 0.25), transparent 60%)",
+   216→          }}
+   217→        />
+   218→        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 backdrop-blur px-4 py-1.5 text-xs sm:text-sm text-muted-foreground animate-fade-in">
+   219→          <span className="relative flex h-2 w-2">
+   220→            <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping" />
+   221→            <span className="relative rounded-full h-2 w-2 bg-emerald-400" />
+   222→          </span>
+   223→          Novo · Suporta vídeos até 10min para monetização no YouTube
+   224→        </div>
+   225→
+   226→        <h1 className="mt-6 text-4xl sm:text-5xl md:text-7xl font-semibold tracking-tight leading-[1.05]">
+   227→          <span className="block bg-gradient-to-r from-cyan-200 via-primary to-accent bg-clip-text text-transparent animate-gradient">
+   228→            Crie vídeos dark
+   229→          </span>
+   230→          <span className="block text-foreground mt-2">para YouTube com IA</span>
+   231→        </h1>
+   232→        <p className="mt-6 text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto px-2">
+   233→          Roteiro, narração cinematográfica e cenas geradas por IA — vídeo MP4 pronto em minutos. Grátis para começar, sem cartão.
+   234→        </p>
+   235→        <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+   236→          <Button asChild size="lg" className="group rounded-full h-14 px-8 text-base btn-blue-gradient border-0 relative overflow-hidden">
+   237→            <Link to="/studio">
+   238→              <span className="relative z-10 flex items-center gap-2">
+   239→                Criar meu primeiro vídeo <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
+   240→              </span>
+   241→              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+   242→            </Link>
+   243→          </Button>
+   244→          <Button size="lg" variant="outline" onClick={() => scrollTo("#features")} className="rounded-full h-14 px-8 text-base border-border bg-card/50 backdrop-blur">
+   245→            Ver recursos
+   246→          </Button>
+   247→        </div>
+   248→
+   249→        {/* Trust bar */}
+   250→        <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+   251→          <span className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-400" /> Sem cartão</span>
+   252→          <span className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-400" /> Exporta MP4 1080p</span>
+   253→          <span className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-400" /> Voz TTS incluída</span>
+   254→          <span className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-400" /> Pronto para monetizar</span>
+   255→        </div>
+   256→
+   257→        {/* Hero video mockup */}
+   258→        <div className="relative mt-14 sm:mt-16">
+   259→          {/* Floating orbiting icons (desktop) */}
+   260→          <div className="hidden md:block absolute inset-0 pointer-events-none">
+   261→            {[Wand2, Film, Mic, Youtube].map((I, i) => (
+   262→              <div
+   263→                key={i}
+   264→                className="absolute top-1/2 left-1/2 w-12 h-12 rounded-2xl bg-card/80 backdrop-blur border border-white/10 flex items-center justify-center shadow-xl shadow-primary/20"
+   265→                style={{
+   266→                  animation: `orbit 18s linear infinite`,
+   267→                  animationDelay: `${-i * 4.5}s`,
+   268→                }}
+   269→              >
+   270→                <I className="h-5 w-5 text-primary" />
+   271→              </div>
+   272→            ))}
+   273→          </div>
+   274→
+   275→          <div className="absolute inset-0 -rotate-3 rounded-3xl bg-card/60 border border-border translate-y-4 hidden sm:block" />
+   276→          <div className="absolute inset-0 rotate-2 rounded-3xl bg-card/60 border border-border translate-y-2 hidden sm:block" />
+   277→          <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden border border-white/10 shadow-2xl shadow-primary/30 bg-black">
+   278→            <div className="relative aspect-video">
+   279→              <img src={heroImg} alt="Cena gerada por IA" className="absolute inset-0 h-full w-full object-cover opacity-70 scale-110 animate-[kenburns_20s_ease-in-out_infinite_alternate]" />
+   280→              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+   281→
+   282→              <div className="absolute inset-0 flex flex-col justify-between p-4 sm:p-8">
+   283→                <div className="flex items-center justify-between gap-3">
+   284→                  <div className="flex items-center gap-2 text-xs sm:text-sm text-white/90 bg-black/40 backdrop-blur rounded-full px-3 py-1.5 border border-white/10">
+   285→                    <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" /> AO VIVO · IA trabalhando
+   286→                  </div>
+   287→                  <div className="text-xs sm:text-sm text-white/70 font-mono bg-black/40 backdrop-blur rounded-full px-3 py-1.5 border border-white/10">
+   288→                    Cena {scene + 1}/{scenes.length}
+   289→                  </div>
+   290→                </div>
+   291→
+   292→                <div className="text-left">
+   293→                  <div key={scene} className="animate-fade-in">
+   294→                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium text-white bg-gradient-to-r ${scenes[scene].color} shadow-lg`}>
+   295→                      {(() => { const I = scenes[scene].icon; return <I className="h-3.5 w-3.5" />; })()}
+   296→                      {scenes[scene].title}
+   297→                    </div>
+   298→                    <div className="mt-3 text-white text-sm sm:text-lg font-medium max-w-md">{scenes[scene].caption}</div>
+   299→                  </div>
+   300→                  <div className="mt-4 flex gap-1.5">
+   301→                    {scenes.map((_, i) => (
+   302→                      <div key={i} className={`h-1 rounded-full transition-all duration-500 ${i === scene ? "w-10 bg-white" : i < scene ? "w-6 bg-white/60" : "w-6 bg-white/20"}`} />
+   303→                    ))}
+   304→                  </div>
+   305→                </div>
+   306→              </div>
+   307→
+   308→              <button
+   309→                onClick={() => setPlaying((p) => !p)}
+   310→                aria-label={playing ? "Pausar" : "Reproduzir"}
+   311→                className="group absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-white/90 flex items-center justify-center hover:scale-110 transition shadow-2xl"
+   312→              >
+   313→                <span className="absolute inset-0 rounded-full bg-white/40 animate-ping group-hover:animate-none" />
+   314→                {playing
+   315→                  ? <Pause className="relative h-6 w-6 sm:h-8 sm:w-8 text-background fill-background" />
+   316→                  : <Play className="relative h-6 w-6 sm:h-8 sm:w-8 text-background fill-background ml-1" />}
+   317→              </button>
+   318→            </div>
+   319→          </div>
+   320→        </div>
+   321→      </section>
+   322→
+   323→      {/* Marquee: models */}
+   324→      <section id="models" className="py-10 border-y border-border bg-card/30 overflow-hidden scroll-mt-20">
+   325→        <div className="text-center text-xs sm:text-sm text-muted-foreground uppercase tracking-widest mb-6 px-4">
+   326→          Alimentado pelos melhores modelos de IA
+   327→        </div>
+   328→        <div className="relative">
+   329→          <div className="pointer-events-none absolute left-0 top-0 h-full w-24 bg-gradient-to-r from-background to-transparent z-10" />
+   330→          <div className="pointer-events-none absolute right-0 top-0 h-full w-24 bg-gradient-to-l from-background to-transparent z-10" />
+   331→          <div className="flex gap-3 w-max animate-marquee">
+   332→            {loopModels.map((m, i) => (
+   333→              <span key={i} className="px-5 py-2.5 rounded-full border border-border bg-card/80 backdrop-blur text-sm text-muted-foreground whitespace-nowrap">
+   334→                {m}
+   335→              </span>
+   336→            ))}
+   337→          </div>
+   338→        </div>
+   339→      </section>
+   340→
+   341→      {/* Tools */}
+   342→      <section id="tools" className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24 scroll-mt-20">
+   343→        <div className="text-center max-w-2xl mx-auto">
+   344→          <div className="inline-block px-3 py-1 rounded-full border border-primary/30 bg-primary/10 text-xs text-primary uppercase tracking-widest mb-4">
+   345→            Ferramentas
+   346→          </div>
+   347→          <h2 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight">O que quer criar hoje?</h2>
+   348→          <p className="mt-4 text-muted-foreground text-sm sm:text-base">
+   349→            Escolha um caminho — a IA cuida do roteiro, das cenas e da narração.
+   350→          </p>
+   351→        </div>
+   352→        <div className="mt-10 sm:mt-14 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4">
+   353→          {tools.map((t, i) => (
+   354→            <Link
+   355→              key={t.label}
+   356→              to="/studio"
+   357→              className="group relative overflow-hidden aspect-[3/4] rounded-2xl border border-border bg-card hover:border-primary/60 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/30 transition-all duration-500 animate-fade-in"
+   358→              style={{ animationDelay: `${i * 70}ms`, animationFillMode: "both" }}
+   359→            >
+   360→              <img src={t.img} alt={t.label} loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-50 group-hover:opacity-90 group-hover:scale-110 transition duration-700" />
+   361→              <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-transparent" />
+   362→              <div className="absolute -inset-x-full top-0 h-full w-1/2 skew-x-12 bg-gradient-to-r from-transparent via-white/20 to-transparent group-hover:animate-[shine_1s_ease-out]" />
+   363→              <div className="relative h-full flex flex-col justify-between p-3 sm:p-4">
+   364→                <span className="text-2xl sm:text-3xl drop-shadow">{t.emoji}</span>
+   365→                <div>
+   366→                  <div className="font-medium text-xs sm:text-sm">{t.label}</div>
+   367→                  <div className="mt-1 text-xs text-primary flex items-center gap-1 group-hover:gap-2 transition-all">
+   368→                    Gerar <ArrowRight className="h-3 w-3" />
+   369→                  </div>
+   370→                </div>
+   371→              </div>
+   372→            </Link>
+   373→          ))}
+   374→        </div>
+   375→      </section>
+   376→
+   377→      {/* Features */}
+   378→      <section id="features" className="mx-auto max-w-6xl px-4 sm:px-6 py-16 sm:py-24 space-y-16 sm:space-y-28 scroll-mt-20">
+   379→        <div className="text-center max-w-3xl mx-auto">
+   380→          <div className="inline-block px-3 py-1 rounded-full border border-accent/30 bg-accent/10 text-xs text-accent uppercase tracking-widest mb-4">
+   381→            Recursos
+   382→          </div>
+   383→          <h2 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight">
+   384→            Pensado para vídeos <span className="bg-gradient-to-r from-cyan-300 to-accent bg-clip-text text-transparent">completos</span>, não só clips
+   385→          </h2>
+   386→          <p className="mt-4 text-muted-foreground text-sm sm:text-base">
+   387→            Da primeira cena ao MP4 final — coerência visual, ritmo narrativo e áudio profissional.
+   388→          </p>
+   389→        </div>
+   390→
+   391→        {[
+   392→          { img: featTemplates, title: "Modelos de história que fazem o trabalho pesado", desc: "Templates prontos para true crime, mistério, terror, história e explicativos. Foque na história, a estrutura vem pronta." },
+   393→          { img: featCharacters, title: "Cenas cinematográficas dark consistentes", desc: "A IA mantém iluminação, paleta e clima cena a cena — resultado que parece feito em estúdio." },
+   394→          { img: featTransitions, title: "Narração TTS + montagem MP4 automáticas", desc: "Voz Onyx, Echo, Fable e mais — a IA junta imagem + áudio e entrega o vídeo final em 1080p." },
+   395→        ].map((f, i) => (
+   396→          <div key={f.title} className={`grid md:grid-cols-2 gap-8 sm:gap-14 items-center ${i % 2 ? "md:[&>*:first-child]:order-2" : ""}`}>
+   397→            <div className="group relative rounded-2xl sm:rounded-3xl overflow-hidden border border-border">
+   398→              <img src={f.img} alt={f.title} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition duration-700" />
+   399→              <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-accent/20 opacity-0 group-hover:opacity-100 transition" />
+   400→            </div>
+   401→            <div>
+   402→              <div className="inline-block px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-mono">0{i + 1}</div>
+   403→              <h3 className="mt-3 text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight">{f.title}</h3>
+   404→              <p className="mt-4 text-muted-foreground text-sm sm:text-base leading-relaxed">{f.desc}</p>
+   405→            </div>
+   406→          </div>
+   407→        ))}
+   408→      </section>
+   409→
+   410→      {/* Stats */}
+   411→      <section ref={statsRef} className="border-y border-border bg-card/30 py-16 sm:py-20 relative overflow-hidden">
+   412→        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5" />
+   413→        <div className="mx-auto max-w-6xl px-4 sm:px-6 relative">
+   414→          <h2 className="text-center text-2xl sm:text-3xl md:text-4xl font-semibold">Usado por criadores em todo o mundo</h2>
+   415→          <div className="mt-12 grid grid-cols-3 gap-4 sm:gap-8 text-center">
+   416→            <Stat n={50} suffix="M+" label="Minutos gerados" start={statsInView} />
+   417→            <Stat n={30} suffix="M+" label="Vídeos criados" start={statsInView} />
+   418→            <Stat n={20} suffix="M+" label="Criadores ativos" start={statsInView} />
+   419→          </div>
+   420→        </div>
+   421→      </section>
+   422→
+   423→      {/* All tools */}
+   424→      <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24">
+   425→        <div className="max-w-2xl">
+   426→          <div className="inline-block px-3 py-1 rounded-full border border-primary/30 bg-primary/10 text-xs text-primary uppercase tracking-widest mb-4">
+   427→            Kit completo
+   428→          </div>
+   429→          <h2 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight">Tudo o que você precisa num só lugar</h2>
+   430→          <p className="mt-4 text-muted-foreground text-sm sm:text-base">Combine as ferramentas para criar, refinar e publicar sem sair da plataforma.</p>
+   431→        </div>
+   432→        <div className="mt-10 sm:mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+   433→          {allTools.map(([title, desc, Icon], i) => (
+   434→            <Link
+   435→              key={title}
+   436→              to="/studio"
+   437→              className="group p-6 rounded-2xl border border-border bg-card/60 backdrop-blur hover:border-primary/60 hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/20 transition-all duration-300 animate-fade-in"
+   438→              style={{ animationDelay: `${i * 40}ms`, animationFillMode: "both" }}
+   439→            >
+   440→              <div className="flex items-center justify-between">
+   441→                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 border border-white/10 flex items-center justify-center group-hover:from-primary/40 group-hover:to-accent/40 transition">
+   442→                  <Icon className="h-5 w-5 text-primary" />
+   443→                </div>
+   444→                <ArrowRight className="h-4 w-4 text-primary opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition" />
+   445→              </div>
+   446→              <h3 className="mt-4 font-semibold text-sm sm:text-base">{title}</h3>
+   447→              <p className="mt-2 text-xs sm:text-sm text-muted-foreground">{desc}</p>
+   448→            </Link>
+   449→          ))}
+   450→        </div>
+   451→      </section>
+   452→
+   453→      {/* Testimonials */}
+   454→      <section id="testimonials" className="border-t border-border py-16 sm:py-24 overflow-hidden scroll-mt-20">
+   455→        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+   456→          <h2 className="text-center text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight">
+   457→            Com a confiança de <span className="bg-gradient-to-r from-cyan-300 to-primary bg-clip-text text-transparent">criadores reais</span>
+   458→          </h2>
+   459→        </div>
+   460→        <div className="relative mt-12">
+   461→          <div className="pointer-events-none absolute left-0 top-0 h-full w-24 bg-gradient-to-r from-background to-transparent z-10" />
+   462→          <div className="pointer-events-none absolute right-0 top-0 h-full w-24 bg-gradient-to-l from-background to-transparent z-10" />
+   463→          <div className="flex gap-4 w-max animate-marquee py-2">
+   464→            {loopTestimonials.map((t, i) => (
+   465→              <Card key={i} className="w-[320px] sm:w-[380px] shrink-0 p-6 border-border bg-card/80 backdrop-blur">
+   466→                <div className="flex gap-1 text-primary">
+   467→                  {Array.from({ length: 5 }).map((_, k) => <Star key={k} className="h-4 w-4 fill-primary" />)}
+   468→                </div>
+   469→                <p className="mt-4 text-sm text-muted-foreground">{t.text}</p>
+   470→                <div className="mt-6 flex items-center gap-3">
+   471→                  <img src={t.img} alt={t.name} loading="lazy" className="h-10 w-10 rounded-full" />
+   472→                  <div>
+   473→                    <div className="text-sm font-medium">{t.name}</div>
+   474→                    <div className="text-xs text-muted-foreground">{t.role}</div>
+   475→                  </div>
+   476→                </div>
+   477→              </Card>
+   478→            ))}
+   479→          </div>
+   480→        </div>
+   481→      </section>
+   482→
+   483→      {/* CTA */}
+   484→      <section id="pricing" className="relative overflow-hidden scroll-mt-20">
+   485→        <div className="absolute inset-0 bg-gradient-to-br from-primary/30 via-background to-accent/30 animate-gradient" />
+   486→        <div className="absolute inset-0 opacity-30" style={{ backgroundImage: "radial-gradient(circle at 20% 30%, oklch(0.65 0.20 250 / 0.3), transparent 40%), radial-gradient(circle at 80% 70%, oklch(0.75 0.16 220 / 0.3), transparent 40%)" }} />
+   487→        <div className="relative mx-auto max-w-4xl px-4 sm:px-6 py-20 sm:py-28 text-center">
+   488→          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 backdrop-blur px-4 py-1.5 text-xs mb-6">
+   489→            <Rocket className="h-3.5 w-3.5 text-primary" />
+   490→            Comece grátis · Sem cartão
+   491→          </div>
+   492→          <h2 className="text-3xl sm:text-4xl md:text-6xl font-semibold tracking-tight">
+   493→            Seu próximo vídeo dark <br className="hidden sm:block" />
+   494→            <span className="bg-gradient-to-r from-cyan-200 via-primary to-accent bg-clip-text text-transparent animate-gradient">está a um clique</span>
+   495→          </h2>
+   496→          <p className="mt-6 text-muted-foreground max-w-xl mx-auto text-sm sm:text-base">
+   497→            Roteiro + cenas + narração + MP4 final. Tudo pronto em minutos, direto no navegador.
+   498→          </p>
+   499→          <div className="mt-10">
+   500→            <Button asChild size="lg" className="group rounded-full h-14 px-10 text-base btn-blue-gradient border-0 relative overflow-hidden">
+   501→              <Link to="/studio">
+   502→                <span className="relative z-10 flex items-center gap-2">
+   503→                  Começar grátis <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
+   504→                </span>
+   505→                <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+   506→              </Link>
+   507→            </Button>
+   508→          </div>
+   509→        </div>
+   510→      </section>
+   511→
+   512→      <footer className="border-t border-border py-10 text-center text-xs sm:text-sm text-muted-foreground px-4">
+   513→        © {new Date().getFullYear()} AIDarkCesar · Todos os direitos reservados
+   514→      </footer>
+   515→    </div>
+   516→  );
+   517→}
