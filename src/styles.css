@@ -249,6 +249,150 @@
   }
 }
 
+/* ── Landing page animations ── */
+
+@keyframes glitch-1 {
+  0%, 100% { clip-path: inset(40% 0 61% 0); transform: translate(-2px, 2px); }
+  20% { clip-path: inset(92% 0 1% 0); transform: translate(1px, -1px); }
+  40% { clip-path: inset(43% 0 1% 0); transform: translate(-1px, 3px); }
+  60% { clip-path: inset(25% 0 58% 0); transform: translate(3px, 1px); }
+  80% { clip-path: inset(54% 0 7% 0); transform: translate(-3px, -2px); }
+}
+
+@keyframes glitch-2 {
+  0%, 100% { clip-path: inset(65% 0 13% 0); transform: translate(2px, -1px); }
+  20% { clip-path: inset(15% 0 62% 0); transform: translate(-1px, 2px); }
+  40% { clip-path: inset(78% 0 2% 0); transform: translate(1px, -3px); }
+  60% { clip-path: inset(2% 0 83% 0); transform: translate(-2px, 1px); }
+  80% { clip-path: inset(33% 0 45% 0); transform: translate(3px, 2px); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes count-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes noise {
+  0%, 100% { background-position: 0 0; }
+  10% { background-position: -5% -10%; }
+  20% { background-position: -15% 5%; }
+  30% { background-position: 7% -25%; }
+  40% { background-position: 20% 25%; }
+  50% { background-position: -25% 10%; }
+  60% { background-position: 15% 5%; }
+  70% { background-position: 0% 15%; }
+  80% { background-position: 25% 35%; }
+  90% { background-position: -10% 10%; }
+}
+
+@utility animate-fade-up {
+  animation: fade-up 0.7s ease-out both;
+}
+
+@utility animate-fade-up-delay-1 {
+  animation: fade-up 0.7s ease-out 0.15s both;
+}
+
+@utility animate-fade-up-delay-2 {
+  animation: fade-up 0.7s ease-out 0.3s both;
+}
+
+@utility animate-fade-up-delay-3 {
+  animation: fade-up 0.7s ease-out 0.45s both;
+}
+
+@utility animate-fade-up-delay-4 {
+  animation: fade-up 0.7s ease-out 0.6s both;
+}
+
+/* Noise overlay pseudo-element utility */
+@utility noise-overlay {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px 256px;
+    animation: noise 8s steps(10) infinite;
+    opacity: 0.5;
+    mix-blend-mode: overlay;
+  }
+}
+
+/* Gradient border card utility */
+@utility gradient-border-card {
+  position: relative;
+  background: var(--color-card);
+  border-radius: var(--radius-xl);
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, oklch(0.65 0.20 250 / 0), oklch(0.65 0.20 250 / 0));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    transition: background 0.4s ease;
+    pointer-events: none;
+  }
+  &:hover::before {
+    background: linear-gradient(135deg, oklch(0.65 0.20 250 / 0.6), oklch(0.78 0.15 220 / 0.3), oklch(0.65 0.20 250 / 0.1));
+  }
+}
+
+/* ── Professional polish ── */
+
+/* Smooth scrolling for the entire app */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom selection color */
+::selection {
+  background: oklch(0.65 0.20 250 / 0.35);
+  color: oklch(0.98 0.01 300);
+}
+
+/* Better audio/video controls */
+audio {
+  height: 36px;
+  border-radius: 8px;
+}
+video {
+  border-radius: 12px;
+}
+
+/* Focus visible for keyboard navigation */
+:focus-visible {
+  outline: 2px solid oklch(0.65 0.20 250);
+  outline-offset: 2px;
+}
+
+/* Smooth section transitions */
+section,
+[class*="space-y"] > * {
+  transition-property: opacity, transform;
+  transition-duration: 300ms;
+  transition-timing-function: ease-out;
+}
+
 #lovable-badge {
   display: none !important;
 }
