@@ -160,7 +160,7 @@ if(window.opener){window.opener.postMessage({type:'tiktok-auth',code:new URLSear
 <body style="background:#111;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
 <div style="text-align:center;">
 <h2 style="color:#00f2ea;">TikTok Conectado com Sucesso!</h2>
-<p style="color:#aaa;">Voce pode fechar esta aba e voltar ao Studio AIDarkCesar.</p>
+<p style="color:#aaa;">Voce pode fechar esta aba e voltar ao StudioAITube.</p>
 <script>
 window.opener.postMessage({type:'tiktok-auth',code:'${code}',state:'${state ?? ""}'},'*');
 window.close();

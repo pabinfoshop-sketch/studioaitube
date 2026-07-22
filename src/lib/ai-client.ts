@@ -107,7 +107,7 @@ const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 function orHeaders(): Record<string, string> {
   return _openRouterKey
-    ? { Authorization: `Bearer ${_openRouterKey}`, "Content-Type": "application/json", "HTTP-Referer": typeof window !== "undefined" ? window.location.origin : "https://studioaitube.pages.dev", "X-Title": "AIDarkCesar" }
+    ? { Authorization: `Bearer ${_openRouterKey}`, "Content-Type": "application/json", "HTTP-Referer": typeof window !== "undefined" ? window.location.origin : "https://studioaitube.pages.dev", "X-Title": "StudioAITube" }
     : {};
 }
 

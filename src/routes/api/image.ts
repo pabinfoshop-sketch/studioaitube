@@ -29,8 +29,8 @@ export const Route = createFileRoute("/api/image")({
             headers: {
               Authorization: `Bearer ${orKey.value}`,
               "Content-Type": "application/json",
-              "HTTP-Referer": "https://darkcesar.lovable.app",
-              "X-Title": "AIDarkCesar",
+              "HTTP-Referer": "https://studioaitube.pages.dev",
+              "X-Title": "StudioAITube",
             },
             models: [
               "google/gemini-2.5-flash-image",

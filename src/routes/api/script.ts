@@ -146,8 +146,8 @@ Responda APENAS com JSON válido, sem markdown, no formato:
               headers: {
                 Authorization: `Bearer ${openRouterKey.value}`,
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://darkcesar.lovable.app",
-                "X-Title": "AIDarkCesar",
+                "HTTP-Referer": "https://studioaitube.pages.dev",
+                "X-Title": "StudioAITube",
               },
               models: [
                 // free first

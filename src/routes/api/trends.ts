@@ -133,8 +133,8 @@ Responda APENAS com JSON válido no formato: {"topics":[{"emoji":"","title":"","
               headers: {
                 Authorization: `Bearer ${openRouterKey.value}`,
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://darkcesar.lovable.app",
-                "X-Title": "AIDarkCesar",
+                "HTTP-Referer": "https://studioaitube.pages.dev",
+                "X-Title": "StudioAITube",
               },
               models: [
                 "deepseek/deepseek-chat-v3.1:free",
