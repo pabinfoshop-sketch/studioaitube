@@ -1,125 +1,6 @@
-// ── Client-side AI calls ──────────────────────────────────────────
-// Bypasses server function timeouts by calling AI providers directly
-// from the browser. Keys come from (in priority order):
-//   1) VITE_* env vars injected at build (vite.config.ts define mapping)
-//   2) /_env.json static file (generated at build time by vite.config.ts)
-//   3) /api/env endpoint as runtime fallback
-//   4) localStorage (user-configured via Settings modal)
+// Browser helpers call local API routes so private AI credentials stay server-side.
 
-// ── Lazy key loading ───────────────────────────────────────────────
-
-const LS_KEYS = "aidc.api_keys";
-let _keysLoaded = false;
-let _keysLoading: Promise<void> | null = null;
-let _openRouterKey = (import.meta as any).env?.VITE_OPENROUTER_API_KEY || "";
-let _replicateKey = (import.meta as any).env?.VITE_REPLICATE_API_KEY || "";
-let _elevenLabsKey = (import.meta as any).env?.VITE_ELEVENLABS_API_KEY || "";
-
-function loadFromLocalStorage(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(LS_KEYS);
-    if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
-  return {};
-}
-
-/** Save keys to localStorage for persistence across sessions */
-export function saveKeysToLocalStorage(keys: { openrouter?: string; replicate?: string; elevenlabs?: string }) {
-  const existing = loadFromLocalStorage();
-  if (keys.openrouter !== undefined) existing.OPENROUTER_API_KEY = keys.openrouter;
-  if (keys.replicate !== undefined) existing.REPLICATE_API_KEY = keys.replicate;
-  if (keys.elevenlabs !== undefined) existing.ELEVENLABS_API_KEY = keys.elevenlabs;
-  localStorage.setItem(LS_KEYS, JSON.stringify(existing));
-  // Update in-memory keys immediately
-  if (keys.openrouter !== undefined) _openRouterKey = keys.openrouter;
-  if (keys.replicate !== undefined) _replicateKey = keys.replicate;
-  if (keys.elevenlabs !== undefined) _elevenLabsKey = keys.elevenlabs;
-  _keysLoaded = true; // Force reload next time
-}
-
-/** Get current in-memory keys (for Settings UI) */
-export function getCurrentKeys() {
-  return { openrouter: _openRouterKey, replicate: _replicateKey, elevenlabs: _elevenLabsKey };
-}
-
-async function loadFromEnvJson(): Promise<Record<string, string>> {
-  try {
-    const r = await fetch("/_env.json", { cache: "no-store", signal: AbortSignal.timeout(5000) });
-    if (r.ok) return await r.json();
-  } catch { /* ignore */ }
-  return {};
-}
-
-async function loadFromApiEnv(): Promise<Record<string, string>> {
-  try {
-    const r = await fetch("/api/env", { signal: AbortSignal.timeout(5000) });
-    if (r.ok) return await r.json();
-  } catch { /* ignore */ }
-  return {};
-}
-
-async function ensureKeys(): Promise<void> {
-  if (_keysLoaded) return;
-  if (_keysLoading) return _keysLoading;
-
-  // Se as chaves já foram injetadas no build, não precisa buscar
-  if (_openRouterKey && _replicateKey) {
-    _keysLoaded = true;
-    return;
-  }
-
-  _keysLoading = (async () => {
-    // 1) Tenta localStorage (user-configured keys — highest runtime priority)
-    const lsKeys = loadFromLocalStorage();
-    if (!_openRouterKey) _openRouterKey = lsKeys.OPENROUTER_API_KEY || "";
-    if (!_replicateKey) _replicateKey = lsKeys.REPLICATE_API_KEY || "";
-    if (!_elevenLabsKey) _elevenLabsKey = lsKeys.ELEVENLABS_API_KEY || "";
-
-    // 2) Tenta _env.json (arquivo estático gerado no build — funciona em qualquer plataforma)
-    if (!_openRouterKey || !_replicateKey) {
-      const envJson = await loadFromEnvJson();
-      if (!_openRouterKey) _openRouterKey = envJson.OPENROUTER_API_KEY || "";
-      if (!_replicateKey) _replicateKey = envJson.REPLICATE_API_KEY || "";
-      if (!_elevenLabsKey) _elevenLabsKey = envJson.ELEVENLABS_API_KEY || "";
-    }
-
-    // 3) Se ainda faltam chaves, tenta /api/env (server-side fallback)
-    if (!_openRouterKey || !_replicateKey) {
-      const apiEnv = await loadFromApiEnv();
-      if (!_openRouterKey) _openRouterKey = apiEnv.OPENROUTER_API_KEY || "";
-      if (!_replicateKey) _replicateKey = apiEnv.REPLICATE_API_KEY || "";
-      if (!_elevenLabsKey) _elevenLabsKey = apiEnv.ELEVENLABS_API_KEY || "";
-    }
-
-    _keysLoaded = true;
-    _keysLoading = null;
-  })();
-  return _keysLoading;
-}
-
-function hasKeys() {
-  return { openrouter: !!_openRouterKey, replicate: !!_replicateKey, elevenlabs: !!_elevenLabsKey };
-}
-
-// ── Dynamic headers (built after keys are loaded) ──
-
-const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
-
-function orHeaders(): Record<string, string> {
-  return _openRouterKey
-    ? { Authorization: `Bearer ${_openRouterKey}`, "Content-Type": "application/json", "HTTP-Referer": typeof window !== "undefined" ? window.location.origin : "https://studioaitube.pages.dev", "X-Title": "StudioAITube" }
-    : {};
-}
-
-const REPLICATE_URL = "https://api.replicate.com/v1";
-
-function rpHeaders(): Record<string, string> {
-  return _replicateKey
-    ? { Authorization: `Bearer ${_replicateKey}` }
-    : {};
-}
-
-// ── Balance (server-side first, browser fallback) ──
+// ── Balance ──
 
 function parseOpenRouterCredits(data: any) {
   const credits = Number(data.total_credits ?? 0);
@@ -143,59 +24,25 @@ function parseOpenRouterData(data: any) {
 }
 
 export async function clientBalance(): Promise<Record<string, any>> {
-  await ensureKeys();
-  const k = hasKeys();
   const result: Record<string, any> = {
     free: { provider: "free", ok: true, statusLabel: "TTS grátis ativo", raw: { tts: "google-free" } },
-    openrouter: { provider: "openrouter", ok: false, error: k.openrouter ? "verificando..." : "sem chave" },
-    replicate: { provider: "replicate", ok: false, error: k.replicate ? "verificando..." : "sem chave" },
+    openrouter: { provider: "openrouter", ok: false, error: "verificando..." },
+    replicate: { provider: "replicate", ok: false, error: "verificando..." },
     order: ["free", "openrouter-free", "openrouter-cheap", "replicate-video"],
   };
 
-  // 1) PRIMEIRO: tenta /api/balance (server-side, sem CORS)
+  // Chaves ficam no backend; retorna também erros do servidor para não mascarar credenciais inválidas.
   try {
     const r = await fetch("/api/balance", { signal: AbortSignal.timeout(10000) });
     if (r.ok) {
       const server: any = await r.json();
-      if (server.openrouter?.ok) result.openrouter = { provider: "openrouter", ...server.openrouter };
-      if (server.replicate?.ok) result.replicate = { provider: "replicate", ...server.replicate };
+      result.openrouter = { provider: "openrouter", ...(server.openrouter ?? { ok: false, error: "sem resposta" }) };
+      result.replicate = { provider: "replicate", ...(server.replicate ?? { ok: false, error: "sem resposta" }) };
+      return result;
     }
-  } catch { /* server endpoint indisponível — tenta direto */ }
-
-  // 2) FALLBACK: chamada direta do browser (OpenRouter aceita CORS)
-  if (!result.openrouter.ok && k.openrouter) {
-    // Tenta /v1/credits primeiro (saldo real)
-    try {
-      const r = await fetch("https://openrouter.ai/api/v1/credits", {
-        headers: orHeaders(),
-        signal: AbortSignal.timeout(8000),
-      });
-      if (r.ok) {
-        const d: any = await r.json();
-        result.openrouter = { provider: "openrouter", ...parseOpenRouterCredits(d.data ?? {}) };
-      } else {
-        throw new Error(`credits ${r.status}`);
-      }
-    } catch {
-      // Fallback para /v1/auth/key
-      try {
-        const r = await fetch("https://openrouter.ai/api/v1/auth/key", {
-          headers: orHeaders(),
-          signal: AbortSignal.timeout(8000),
-        });
-        if (r.ok) {
-          const d: any = await r.json();
-          result.openrouter = { provider: "openrouter", ...parseOpenRouterData(d.data ?? {}) };
-        }
-      } catch (e: any) {
-        result.openrouter = { ok: false, error: e?.message || "falha de rede" };
-      }
-    }
-  }
-
-  // Replicate NUNCA funciona via browser (CORS bloqueado)
-  if (!result.replicate.ok && k.replicate) {
-    result.replicate = { ok: false, error: "proxy indisponível" };
+  } catch (e: any) {
+    result.openrouter = { ok: false, error: e?.message || "falha de rede" };
+    result.replicate = { ok: false, error: e?.message || "falha de rede" };
   }
 
   return result;
@@ -203,99 +50,28 @@ export async function clientBalance(): Promise<Record<string, any>> {
 
 // ── Script Generation ──
 
-const SCRIPT_MODELS = [
-  "deepseek/deepseek-chat-v3.1:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "google/gemini-2.0-flash-exp:free",
-  "deepseek/deepseek-chat-v3.1",
-  "google/gemini-2.5-flash-lite",
-  "openai/gpt-4o-mini",
-  "google/gemini-2.5-flash",
-];
-
 export async function clientScript(topic: string, sceneCount: number, language = "pt-BR") {
-  await ensureKeys();
-  if (!_openRouterKey) throw new Error("Chave OpenRouter não configurada. Adicione OPENROUTER_API_KEY nas variáveis de ambiente.");
-
-  const prompt = `Você é roteirista e especialista em SEO de canais dark do YouTube (mistério, terror, sobrenatural, true crime).
-Crie um roteiro em ${language} sobre: "${topic}".
-Divida em exatamente ${sceneCount} cenas. Cada narração tem 3 a 5 frases densas, atmosfera sombria, ritmo cinematográfico e ganchos.
-Para cada cena escreva também um imagePrompt em INGLÊS descrevendo uma imagem cinematográfica dark, atmosférica, 16:9, sem texto na imagem.
-
-Também gere metadados otimizados para RANKEAR no YouTube:
-- seoTitle: máx 70 caracteres, com curiosity gap + emoji + palavra-chave forte
-- seoDescription: 3 parágrafos — 1º com hook + palavra-chave; 2º expandindo o mistério; 3º com CTA "Inscreva-se" + 5 hashtags
-- tags: array de 15-20 tags misturando palavra-chave principal, long-tail em português e termos do nicho
-- thumbnailPrompt em INGLÊS: cena impactante, expressão facial marcante, cores contrastantes, sem texto, YouTube thumbnail style
-- thumbnailText: 3-6 palavras EM CAIXA ALTA para sobrepor na thumb
-
-Responda APENAS com JSON válido, sem markdown, no formato:
-{"title":"","hook":"","seoTitle":"","seoDescription":"","tags":[],"thumbnailPrompt":"","thumbnailText":"","scenes":[{"title":"","narration":"","imagePrompt":""}]}`;
-
-  const errors: string[] = [];
-  for (const model of SCRIPT_MODELS) {
-    try {
-      const r = await fetch(OR_URL, {
-        method: "POST",
-        headers: orHeaders(),
-        body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], response_format: { type: "json_object" } }),
-      });
-      if (!r.ok) {
-        const t = await r.text().catch(() => "");
-        errors.push(`${model}: ${r.status} ${t.slice(0, 80)}`);
-        continue;
-      }
-      const j = await r.json();
-      const text: string = j?.choices?.[0]?.message?.content ?? "";
-      if (!text) { errors.push(`${model}: resposta vazia`); continue; }
-      const cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
-      const match = cleaned.match(/\{[\s\S]*\}/);
-      if (!match) { errors.push(`${model}: sem JSON`); continue; }
-      return { ...JSON.parse(match[0]), modelUsed: `openrouter/${model}` };
-    } catch (e: any) {
-      errors.push(`${model}: ${e?.message || "erro"}`);
-    }
-  }
-  throw new Error(`Todos os modelos falharam: ${errors.join(" | ")}`);
+  const r = await fetch("/api/script", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topic, sceneCount, language }),
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!r.ok) throw new Error(await r.text().catch(() => "Falha ao gerar roteiro"));
+  return await r.json();
 }
 
 // ── Image Generation ──
 
-const IMAGE_MODELS = [
-  "google/gemini-2.5-flash-image",
-  "google/gemini-3-pro-image",
-];
-
 export async function clientImage(prompt: string): Promise<{ b64: string; mime: string; modelUsed: string }> {
-  await ensureKeys();
-  if (!_openRouterKey) throw new Error("Chave OpenRouter não configurada. Adicione OPENROUTER_API_KEY nas variáveis de ambiente.");
-
-  const fullPrompt = `Cinematic dark atmospheric 16:9 image, no text: ${prompt}`;
-  const errors: string[] = [];
-  for (const model of IMAGE_MODELS) {
-    try {
-      const r = await fetch(OR_URL, {
-        method: "POST",
-        headers: orHeaders(),
-        body: JSON.stringify({ model, messages: [{ role: "user", content: fullPrompt }], modalities: ["image", "text"] }),
-      });
-      if (!r.ok) {
-        errors.push(`${model}: ${r.status}`);
-        continue;
-      }
-      const j: any = await r.json();
-      const imgs = j?.choices?.[0]?.message?.images;
-      const url: string | undefined = imgs?.[0]?.image_url?.url;
-      if (url?.startsWith("data:image")) {
-        const b64 = url.split(",")[1];
-        return { b64, mime: "image/png", modelUsed: `openrouter/${model}` };
-      }
-      errors.push(`${model}: sem imagem no retorno`);
-    } catch (e: any) {
-      errors.push(`${model}: ${e?.message || "erro"}`);
-    }
-  }
-  throw new Error(`Falha ao gerar imagem: ${errors.join(" | ")}`);
+  const r = await fetch("/api/image", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt }),
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!r.ok) throw new Error(await r.text().catch(() => "Falha ao gerar imagem"));
+  return await r.json();
 }
 
 // ── TTS (usa /api/tts server-side como proxy — sem CORS) ──
@@ -319,80 +95,21 @@ export async function clientTts(text: string, voice?: string): Promise<Blob> {
     console.warn("[TTS] server indisponível:", e?.message);
   }
 
-  // Fallback direto: ElevenLabs (aceita CORS)
-  if (_elevenLabsKey) {
-    const VOICE_MAP: Record<string, string> = { onyx: "JBFqnCBsd6RMkjVDRZzb", alloy: "EXAVITQu4vr4xnSDxMaL", echo: "TX3LPaxmHKxFdv7VOQHJ" };
-    const voiceId = VOICE_MAP[voice || "onyx"] || VOICE_MAP.onyx;
-    try {
-      const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
-        method: "POST",
-        headers: { "xi-api-key": _elevenLabsKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ text, model_id: "eleven_multilingual_v2", voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true } }),
-      });
-      if (r.ok) return await r.blob();
-    } catch { /* ignore */ }
-  }
-
   throw new Error("Falha ao gerar áudio. Servidor TTS indisponível.");
 }
 
-// ── Animate (Replicate image→video, client-side polling) ──
-
-const REPLICATE_MODEL = "wan-video/wan-2.2-i2v-fast";
-
-function dataUrlToBlob(dataUrl: string): { blob: Blob; name: string } {
-  const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!m) throw new Error("imageDataUrl inválido");
-  const bin = atob(m[2]);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const mime = m[1];
-  const ext = mime.includes("png") ? "png" : "jpg";
-  return { blob: new Blob([bytes], { type: mime }), name: `frame.${ext}` };
-}
+// ── Animate (Replicate image→video via server proxy) ──
 
 export async function clientAnimate(imageDataUrl: string, prompt: string, onProgress?: (msg: string) => void): Promise<{ videoUrl: string; modelUsed: string }> {
-  await ensureKeys();
-  if (!_replicateKey) throw new Error("Chave Replicate não configurada. Adicione REPLICATE_API_KEY nas variáveis de ambiente do Netlify.");
-
-  // 1) Upload image
-  onProgress?.("Enviando imagem para Replicate...");
-  const { blob } = dataUrlToBlob(imageDataUrl);
-  const form = new FormData();
-  form.append("content", blob, "frame.png");
-  const upRes = await fetch(`${REPLICATE_URL}/files`, { method: "POST", headers: rpHeaders(), body: form });
-  if (!upRes.ok) throw new Error(`Upload Replicate: ${upRes.status}`);
-  const upJson: any = await upRes.json();
-  const imageUrl: string = upJson?.urls?.get;
-  if (!imageUrl) throw new Error("Upload sem URL.");
-
-  // 2) Create prediction
-  onProgress?.("Criando predição de vídeo...");
-  const createRes = await fetch(`${REPLICATE_URL}/models/${REPLICATE_MODEL}/predictions`, {
+  onProgress?.("Gerando vídeo no backend...");
+  const r = await fetch("/api/animate", {
     method: "POST",
-    headers: { ...rpHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({ input: { image: imageUrl, prompt: prompt || "cinematic subtle motion, camera drift, atmospheric" } }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ imageDataUrl, prompt }),
+    signal: AbortSignal.timeout(300000),
   });
-  if (createRes.status === 402) throw new Error("Conta Replicate sem créditos. Ative billing em replicate.com/account/billing.");
-  if (!createRes.ok) throw new Error(`Replicate ${createRes.status}`);
-  const pred: any = await createRes.json();
-  const id = pred?.id;
-  if (!id) throw new Error("Sem id de predição.");
-
-  // 3) Poll
-  for (let i = 0; i < 80; i++) {
-    await new Promise((r) => setTimeout(r, i < 5 ? 3000 : 5000));
-    onProgress?.(`Gerando vídeo... (${i + 1}/${Math.min(40, 80)})`);
-    const r = await fetch(`${REPLICATE_URL}/predictions/${id}`, { headers: rpHeaders() });
-    const j: any = await r.json();
-    if (j.status === "succeeded") {
-      const out = Array.isArray(j.output) ? j.output[0] : j.output;
-      if (!out) throw new Error("Sem output de vídeo.");
-      return { videoUrl: out, modelUsed: `replicate/${REPLICATE_MODEL}` };
-    }
-    if (j.status === "failed" || j.status === "canceled") throw new Error(`Predição ${j.status}: ${j?.error ?? "sem detalhe"}`);
-  }
-  throw new Error("Timeout aguardando vídeo.");
+  if (!r.ok) throw new Error(await r.text().catch(() => "Falha ao animar cena"));
+  return await r.json();
 }
 
 // ── TikTok AI: Auto-Captions (Whisper via server proxy) ──
