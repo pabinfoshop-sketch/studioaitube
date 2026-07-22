@@ -394,3 +394,61 @@ export async function clientAnimate(imageDataUrl: string, prompt: string, onProg
   }
   throw new Error("Timeout aguardando vídeo.");
 }
+
+// ── TikTok AI: Auto-Captions (Whisper via server proxy) ──
+
+export type CaptionSegment = { start: number; end: number; text: string; words?: { word: string; start: number; end: number }[] };
+
+export async function clientCaptions(audioBlobOrUrl: Blob | string, onProgress?: (msg: string) => void): Promise<{ captions: CaptionSegment[]; modelUsed: string }> {
+  onProgress?.("Preparando áudio para transcrição…");
+
+  let audioUrl: string;
+  if (typeof audioBlobOrUrl === "string") {
+    audioUrl = audioBlobOrUrl;
+  } else {
+    // Upload audio blob to a temp host first, then send URL to server
+    onProgress?.("Hospedando áudio temporário…");
+    const form = new FormData();
+    form.append("reqtype", "fileupload");
+    form.append("time", "1h");
+    form.append("fileToUpload", audioBlobOrUrl, "audio.mp3");
+    const upRes = await fetch("https://litterbox.catbox.moe/resources/internals/api.php", { method: "POST", body: form });
+    const uploadedUrl = (await upRes.text()).trim();
+    if (!uploadedUrl.startsWith("http")) throw new Error("Falha ao hospedar áudio para transcrição.");
+    audioUrl = uploadedUrl;
+  }
+
+  onProgress?.("Gerando legendas com IA…");
+  const r = await fetch("/api/captions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ audioUrl, language: "pt" }),
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!r.ok) {
+    const err = await r.text();
+    throw new Error(`Legendas: ${err}`);
+  }
+  const data: any = await r.json();
+  onProgress?.("Legendas geradas!");
+  return { captions: data.captions ?? [], modelUsed: data.modelUsed ?? "replicate/whisper" };
+}
+
+// ── TikTok AI: Background Music (MusicGen via server proxy) ──
+
+export async function clientMusic(prompt: string, duration: number, mood: string = "dark suspense horror", onProgress?: (msg: string) => void): Promise<{ audioUrl: string; modelUsed: string }> {
+  onProgress?.("Gerando música de fundo com IA…");
+  const r = await fetch("/api/music", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, duration, mood }),
+    signal: AbortSignal.timeout(300000),
+  });
+  if (!r.ok) {
+    const err = await r.text();
+    throw new Error(`Música: ${err}`);
+  }
+  const data: any = await r.json();
+  onProgress?.("Música gerada!");
+  return { audioUrl: data.audioUrl, modelUsed: data.modelUsed ?? "replicate/musicgen" };
+}
